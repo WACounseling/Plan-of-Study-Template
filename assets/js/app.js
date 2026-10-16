@@ -427,7 +427,7 @@
       msg.innerHTML = '<div class="ok"><b>✓ Course plan created in your Google Drive.</b><br>You own it and can edit it' + (data.shared ? '; ' + esc(i.studentEmail) + ' has view-only access.' : '.') +
         '<br><a href="' + esc(data.url) + '" target="_blank" rel="noopener">Open the Google Doc →</a>' + (data.warnings && data.warnings.length ? '<br><small><b>Please note:</b> ' + esc(data.warnings.join(' ')) + '</small>' : '') + '</div>';
     } catch (err) {
-      msg.innerHTML = '<div class="bad"><b>Could not create the Google Doc.</b> ' + esc(err.message || String(err)) + ' Make sure the Google Docs and Drive APIs are enabled for this site’s Google Cloud project, then try again. Use “Save draft file” to keep your work.</div>';
+      msg.innerHTML = '<div class="bad"><b>Could not create the Google Doc.</b> ' + esc(err.message || String(err)) + ' Make sure the Google Docs and Drive APIs are enabled for this site’s Google Cloud project, then try again. Use “Save draft to my Google Drive” to keep your work.</div>';
     } finally { btn.disabled = false; btn.textContent = 'Submit Course Plan'; }
   }
   function markBad() {
@@ -436,16 +436,49 @@
     set('info.classOf', !i.classOf); set('info.date', !i.date);
   }
 
-  /* ---------------- drafts ---------------- */
-  function saveDraft() {
-    const c = JSON.parse(JSON.stringify(state));
-    const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(c, null, 1)], { type: 'application/json' })), download: 'course-plan-draft-' + (state.info.studentName || 'student').replace(/\W+/g, '-').toLowerCase() + '.json' });
-    document.body.appendChild(a); a.click(); a.remove();
+  /* ---------------- drafts (private files in the counselor's own Google Drive) ---------------- */
+  const hasWork = () => state.info.studentName.trim() || E.GRADES.some(g => E.ALL_SLOTS.some(s => state.plan[g][s.k].f || state.plan[g][s.k].s));
+  function needSignIn(msg) {
+    if (WA.google && WA.google.user) return false;
+    msg.innerHTML = '<div class="bad"><b>Please sign in with Google first (Step 1).</b> Drafts are saved in your own Google Drive.</div>'; $('#s-info').scrollIntoView({ behavior: 'smooth' }); return true;
   }
-  function loadDraft(file) {
-    const r = new FileReader();
-    r.onload = () => { try { mergeState(JSON.parse(r.result)); fullRender(); } catch (e) { $('#submitMsg').innerHTML = '<div class="bad">That file is not a valid draft.</div>'; } };
-    r.readAsText(file);
+  async function saveDraft() {
+    const msg = $('#submitMsg'); msg.innerHTML = ''; if (needSignIn(msg)) return;
+    const btn = $('#saveDraft'); btn.disabled = true; const old = btn.textContent; btn.textContent = 'Saving…';
+    try {
+      const initials = (state.info.studentName.trim().split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase()).join('.') || 'Unnamed') + '.';
+      const name = 'Placement — ' + initials + (state.info.classOf ? ' — Class of ' + state.info.classOf : '') + ' — ' + (state.info.date || '') + '.placement';
+      const r = await WA.google.saveDraft(JSON.parse(JSON.stringify(state)), name);
+      msg.innerHTML = '<div class="ok"><b>✓ Draft ' + (r.updated ? 'updated' : 'saved') + ' in your Google Drive</b> (folder “WA Course Planner Drafts”): ' + esc(r.name) + '<br><small>Encrypted: only this app, signed in as you, can read it. It was not downloaded to this computer.</small></div>';
+    } catch (e) { msg.innerHTML = '<div class="bad"><b>Could not save the draft.</b> ' + esc(e.message || String(e)) + '</div>'; }
+    finally { btn.disabled = false; btn.textContent = old; }
+  }
+  async function openDrafts() {
+    const msg = $('#submitMsg'); msg.innerHTML = ''; if (needSignIn(msg)) return;
+    let list;
+    try { list = await WA.google.listDrafts(); } catch (e) { msg.innerHTML = '<div class="bad"><b>Could not read your drafts.</b> ' + esc(e.message || String(e)) + '</div>'; return; }
+    const d = $('#dlg'), body = $('#dlgBody'), act = $('#dlgActions'); act.innerHTML = '';
+    body.innerHTML = '<h3>Your saved drafts</h3>' + (list.length ? '<p class="muted">Encrypted .placement files stored privately in your Google Drive. File names show initials only.</p>' : '<p>No saved drafts yet. Use “Save draft to my Google Drive” first.</p>');
+    const wrap = h('div', { class: 'draftlist' });
+    list.forEach(f => {
+      const row = h('div', { class: 'draftrow' }, h('div', {}, h('b', { text: f.name.replace(/\.(json|placement)$/, '') }), h('small', { text: 'Last saved ' + new Date(f.modifiedTime).toLocaleString() })));
+      const open = h('button', { type: 'button', class: 'btn primary', text: 'Open' });
+      open.addEventListener('click', async () => {
+        if (hasWork() && !confirm('Opening this draft will replace the plan you are working on. Continue?')) return;
+        open.disabled = true; open.textContent = 'Opening…';
+        try { const data = await WA.google.loadDraft(f.id); mergeState(data); d.close(); fullRender(); msg.innerHTML = '<div class="ok">Draft opened: ' + esc(f.name) + '</div>'; }
+        catch (e) { open.disabled = false; open.textContent = 'Open'; msg.innerHTML = '<div class="bad">Could not open that draft. ' + esc(e.message || String(e)) + '</div>'; d.close(); }
+      });
+      const del = h('button', { type: 'button', class: 'btn ghost', text: 'Delete' });
+      del.addEventListener('click', async () => {
+        if (!confirm('Move this draft to your Drive trash?')) return;
+        try { await WA.google.trashDraft(f.id); row.remove(); } catch (e) { alert('Could not delete: ' + (e.message || e)); }
+      });
+      row.appendChild(h('div', { class: 'draftbtns' }, open, del)); wrap.appendChild(row);
+    });
+    body.appendChild(wrap);
+    act.appendChild(h('button', { type: 'button', class: 'btn ghost', text: 'Close', onclick: () => d.close() }));
+    d.showModal();
   }
   async function reset() {
     const ok = await dialog('<h3>Start over?</h3><p>This clears the student information, prior credit, plan and cocurriculars.</p>', [{ text: 'Cancel', value: false }, { text: 'Clear everything', value: true, primary: true }]);
@@ -491,7 +524,7 @@
     $('#addCoc').addEventListener('click', () => { state.cocurr.push({ name: '', status: 'active' }); renderCoc(); });
     $('#submitBtn').addEventListener('click', submit);
     $('#saveDraft').addEventListener('click', saveDraft);
-    $('#loadDraft').addEventListener('change', e => { if (e.target.files[0]) loadDraft(e.target.files[0]); e.target.value = ''; });
+    $('#loadDraft').addEventListener('click', openDrafts);
     $('#resetAll').addEventListener('click', reset);
     $('#ovOn').addEventListener('change', e => { state.override.on = e.target.checked; save(); });
     $('#ovReason').addEventListener('input', e => { state.override.reason = e.target.value; save(); });
