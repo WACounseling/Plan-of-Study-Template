@@ -143,10 +143,11 @@
     <p class="help small">Submitting creates a Google Doc in <b>your Google Drive</b> (you are the owner and can edit it) and shares it <b>view-only</b> with the student. Page 1 is the four-year plan; page 2 is the graduation, scholarship and NCAA reference. You must be signed in with Google (Step 1).</p>
     <div class="actions">
       <button type="button" class="btn primary big" id="submitBtn">Submit Course Plan</button>
-      <button type="button" class="btn ghost" id="saveDraft">Save draft file</button>
-      <label class="btn ghost filebtn">Load draft<input type="file" id="loadDraft" accept=".json,application/json" hidden></label>
+      <button type="button" class="btn ghost" id="saveDraft">Save draft to my Google Drive</button>
+      <button type="button" class="btn ghost" id="loadDraft">Open a saved draft…</button>
       <button type="button" class="btn link" id="resetAll">Start over</button>
     </div>
+    <p class="help small">Drafts are saved as <b>encrypted <code>.placement</code> files</b> in <b>your own Google Drive</b> (folder “WA Course Planner Drafts”). Only this app, while you are signed in, can read them. They are never shared with students and nothing is saved to this computer’s Downloads folder.</p>
     <div id="submitMsg" class="submitmsg" role="status" aria-live="polite"></div>
   </section>
 </main>
