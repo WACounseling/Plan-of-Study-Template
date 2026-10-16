@@ -100,22 +100,78 @@
     return result;
   };
 
-  function find(doc, token) {
-    for (const el of (doc.body && doc.body.content) || []) {
-      if (!el.paragraph) continue;
-      for (const pe of el.paragraph.elements || []) {
-        const c = pe.textRun && pe.textRun.content; const i = c ? c.indexOf(token) : -1;
-        if (i >= 0) return pe.startIndex + i;
+  /* ---- walk the real document structure (including tables) so every index comes from Google, not guesses ---- */
+  function walk(content, visit, inTable) {
+    (content || []).forEach(el => {
+      if (el.paragraph) visit({ type: 'p', el, inTable: !!inTable });
+      else if (el.table) {
+        const tb = el.table, info = { type: 't', el, rows: tb.rows, cols: tb.columns, start: el.startIndex };
+        visit(info);
+        (tb.tableRows || []).forEach(r => (r.tableCells || []).forEach(c => walk(c.content, visit, true)));
       }
-    }
-    return null;
+    });
+  }
+  function scan(doc) {
+    const out = { tables: [], paras: [], tokens: {} };
+    walk(doc.body && doc.body.content, n => {
+      if (n.type === 't') { out.tables.push(n); return; }
+      out.paras.push(n);
+      (n.el.paragraph.elements || []).forEach(pe => {
+        const c = pe.textRun && pe.textRun.content; if (!c) return;
+        ['[[LOGO]]', '[[PB]]'].forEach(tk => { const i = c.indexOf(tk); if (i >= 0 && out.tokens[tk] == null) out.tokens[tk] = pe.startIndex + i; });
+      });
+    });
+    return out;
   }
   const PT = n => ({ magnitude: n, unit: 'PT' });
+  // expected tables in document order: [columns, column widths in points]
+  const TABLE_SPECS = [
+    [2, [230, 310]],                       // header: logo | title
+    [1, [540]],                            // red rule
+    [4, [78, 150, 112, 200]],              // student / counselor info
+    [5, [66, 118.5, 118.5, 118.5, 118.5]], // four-year grid
+    [5, [108, 108, 108, 108, 108]],        // requirement tracker
+    [2, [270, 270]],                       // cocurriculars
+    [1, [540]],                            // red rule (page 2)
+    [2, [270, 270]]                        // reference columns
+  ];
+  function layoutRequests(sc) {
+    const r = [], used = [];
+    let si = 0;
+    sc.tables.forEach(t => {
+      // match the next unused spec with the same column count
+      let k = si; while (k < TABLE_SPECS.length && TABLE_SPECS[k][0] !== t.cols) k++;
+      if (k >= TABLE_SPECS.length) return; si = k + 1;
+      const widths = TABLE_SPECS[k][1], isRule = t.cols === 1;
+      const loc = { index: t.start };
+      widths.forEach((w, ci) => r.push({ updateTableColumnProperties: { tableStartLocation: loc, columnIndices: [ci], tableColumnProperties: { widthType: 'FIXED_WIDTH', width: PT(w) }, fields: 'widthType,width' } }));
+      r.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: loc, rowIndex: 0, columnIndex: 0 }, rowSpan: t.rows, columnSpan: t.cols },
+        tableCellStyle: isRule ? { paddingTop: PT(0), paddingBottom: PT(0), paddingLeft: PT(0), paddingRight: PT(0) } : { paddingTop: PT(3), paddingBottom: PT(3), paddingLeft: PT(4), paddingRight: PT(4) },
+        fields: 'paddingTop,paddingBottom,paddingLeft,paddingRight' } });
+      if (isRule) r.push({ updateTableRowStyle: { tableStartLocation: loc, rowIndices: [0], tableRowStyle: { minRowHeight: PT(3) }, fields: 'minRowHeight' } });
+      used.push({ t, rule: isRule });
+    });
+    // tight, uniform paragraph spacing (Docs' default 1.15 spacing otherwise pushes page 1 onto a second page)
+    const last = sc.paras.length ? sc.paras[sc.paras.length - 1].el.endIndex : 2;
+    r.push({ updateParagraphStyle: { range: { startIndex: 1, endIndex: Math.max(2, last - 1) }, paragraphStyle: { lineSpacing: 100, spaceAbove: PT(0), spaceBelow: PT(0) }, fields: 'lineSpacing,spaceAbove,spaceBelow' } });
+    // keep course lines from touching inside grid cells
+    sc.paras.forEach(n => {
+      const pe = n.el.paragraph.elements || [];
+      const text = pe.map(e => (e.textRun && e.textRun.content) || '').join('').replace(/[\s\u00a0]/g, '');
+      const ruleCell = used.some(u => u.rule && n.el.startIndex >= u.t.start && n.el.endIndex <= u.t.el.endIndex);
+      if (ruleCell) r.push({ updateTextStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, textStyle: { fontSize: PT(1) }, fields: 'fontSize' } });
+      else if (!text && !n.inTable) r.push({ updateTextStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, textStyle: { fontSize: PT(3) }, fields: 'fontSize' } });
+      else if (n.inTable && text && !ruleCell) r.push({ updateParagraphStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, paragraphStyle: { spaceBelow: PT(1) }, fields: 'spaceBelow' } });
+    });
+    return r;
+  }
   async function finishDoc(id, tok, logoUrl, warnings) {
     const doc = await api('https://docs.googleapis.com/v1/documents/' + id, {}, tok);
-    const pb = find(doc, '[[PB]]'), logo = find(doc, '[[LOGO]]');
-    const build = withImage => {
-      const r = [{ updateDocumentStyle: { documentStyle: { marginTop: PT(36), marginBottom: PT(36), marginLeft: PT(36), marginRight: PT(36), pageSize: { width: PT(612), height: PT(792) } }, fields: 'marginTop,marginBottom,marginLeft,marginRight,pageSize' } }];
+    const sc = scan(doc); const pb = sc.tokens['[[PB]]'], logo = sc.tokens['[[LOGO]]'];
+    const margins = { updateDocumentStyle: { documentStyle: { marginTop: PT(36), marginBottom: PT(36), marginLeft: PT(36), marginRight: PT(36), pageSize: { width: PT(612), height: PT(792) } }, fields: 'marginTop,marginBottom,marginLeft,marginRight,pageSize' } };
+    // style requests do not move any indices, so they go first; token edits go last, later-in-document first
+    const tokenOps = (withImage) => {
+      const r = [];
       if (pb != null) r.push({ deleteContentRange: { range: { startIndex: pb, endIndex: pb + 6 } } }, { insertPageBreak: { location: { index: pb } } });
       if (logo != null) {
         if (withImage && logoUrl) r.push({ deleteContentRange: { range: { startIndex: logo, endIndex: logo + 8 } } }, { insertInlineImage: { uri: logoUrl, location: { index: logo }, objectSize: { width: PT(150), height: PT(43) } } });
@@ -124,8 +180,15 @@
       return r;
     };
     const send = r => api('https://docs.googleapis.com/v1/documents/' + id + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: r }) }, tok);
-    try { await send(build(true)); }
-    catch (e) { warnings.push('The logo image could not be inserted, so a text wordmark was used.'); await send(build(false)); }
+    let layout = []; try { layout = layoutRequests(sc); } catch (e) { warnings.push('Layout clean-up was skipped (' + e.message + ').'); }
+    const attempts = [
+      () => send([margins].concat(layout, tokenOps(true))),
+      () => { warnings.push('The logo image could not be inserted, so a text wordmark was used.'); return send([margins].concat(layout, tokenOps(false))); },
+      () => { warnings.push('Table layout clean-up could not be applied; margins, page break and logo were set.'); return send([margins].concat(tokenOps(false))); }
+    ];
+    let lastErr;
+    for (const a of attempts) { try { await a(); return; } catch (e) { lastErr = e; } }
+    throw lastErr;
   }
 
   WA.google = G;
