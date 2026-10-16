@@ -11,7 +11,7 @@
   const ord = g => ({ 9: '9th', 10: '10th', 11: '11th', 12: '12th' }[g] || String(g));
   const px = pt => Math.round(pt * 4 / 3);
 
-  const p = (html, st) => '<p style="' + F + 'margin:0;' + (st || '') + '">' + html + '</p>';
+  const p = (html, st) => '<p style="' + F + 'margin:0;line-height:1.1;' + (st || '') + '">' + html + '</p>';
   const cell = (inner, o) => {
     o = o || {};
     return '<td width="' + (o.w ? px(o.w) : '') + '" valign="' + (o.v || 'top') + '" style="' + F + (o.w ? 'width:' + px(o.w) + 'px;' : '') +
@@ -77,7 +77,7 @@
     out.push(table([A.slice(0, 5).map(tcell), A.slice(5, 10).map(tcell)]));
     const gh = d.tracker.ghsa.map(x => ord(x.grade) + ' grade ' + fmt(x.have) + '/' + x.need + (x.met ? ' ✓' : '')).join('   ·   ');
     out.push(p('Credits by end of year (GHSA checkpoints):  ' + esc(gh), 'font-size:6.8pt;color:' + C.MUTED + ';margin-top:3pt;'));
-    out.push(p('HOPE / Zell Miller rigor courses planned: ' + d.tracker.rigor.have + ' of 4 needed   ·   NCAA Division I core credits planned: ' + fmt(d.tracker.ncaa.total) + ' of 16', 'font-size:6.8pt;color:' + C.MUTED + ';margin-bottom:2pt;'));
+    out.push(p('HOPE / Zell Miller rigor courses planned: ' + d.tracker.rigor.have + ' (4 needed)   ·   NCAA Division I core credits planned: ' + fmt(d.tracker.ncaa.total) + ' (16 needed)', 'font-size:6.8pt;color:' + C.MUTED + ';margin-bottom:2pt;'));
 
     /* cocurriculars */
     out.push(sectionTitle('COCURRICULAR ACTIVITIES'));
