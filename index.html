@@ -26,7 +26,28 @@
   <div class="head-bar"></div>
 </header>
 
-<main id="main" class="wrap">
+<div class="layout">
+<nav class="sidenav" id="sidenav" aria-label="Planner sections">
+  <div class="sn-student" id="snStudent"><span class="sn-name" id="snName">New course plan</span><span class="sn-grad" id="snGrad"></span></div>
+  <ol class="sn-list">
+    <li><a href="#s-info" data-spy="s-info"><span class="sn-num">1</span><span class="sn-text">Student &amp; Counselor</span><span class="sn-dot s-none" data-dot="info"></span></a></li>
+    <li><a href="#s-prior" data-spy="s-prior"><span class="sn-num">2</span><span class="sn-text">Prior Credit &amp; Placement</span><span class="sn-dot s-none" data-dot="prior"></span></a></li>
+    <li class="has-sub"><a href="#s-grades" data-spy="s-grades"><span class="sn-num">3</span><span class="sn-text">Four-Year Plan</span><span class="sn-dot s-none" data-dot="grades"></span></a>
+      <ul class="sn-sub">
+        <li><a href="#grade-9" data-spy="grade-9"><span class="sn-text">9th Grade</span><span class="sn-dot s-none" data-dot="g9"></span></a></li>
+        <li><a href="#grade-10" data-spy="grade-10"><span class="sn-text">10th Grade</span><span class="sn-dot s-none" data-dot="g10"></span></a></li>
+        <li><a href="#grade-11" data-spy="grade-11"><span class="sn-text">11th Grade</span><span class="sn-dot s-none" data-dot="g11"></span></a></li>
+        <li><a href="#grade-12" data-spy="grade-12"><span class="sn-text">12th Grade</span><span class="sn-dot s-none" data-dot="g12"></span></a></li>
+      </ul></li>
+    <li><a href="#s-cocurr" data-spy="s-cocurr"><span class="sn-num">4</span><span class="sn-text">Cocurricular Activities</span><span class="sn-dot s-none" data-dot="coc"></span></a></li>
+    <li><a href="#s-notes" data-spy="s-notes"><span class="sn-num">+</span><span class="sn-text">Counselor Notes</span><span class="sn-dot s-none" data-dot="notes"></span></a></li>
+    <li><a href="#s-tracker" data-spy="s-tracker"><span class="sn-num">✓</span><span class="sn-text">Credit Tracker</span><span class="sn-badge" id="snTrk">0/10</span></a></li>
+    <li><a href="#s-ref" data-spy="s-ref"><span class="sn-num">i</span><span class="sn-text">Graduation Reference</span></a></li>
+    <li><a href="#s-submit" data-spy="s-submit"><span class="sn-num">5</span><span class="sn-text">Review &amp; Submit</span><span class="sn-dot s-none" data-dot="submit"></span></a></li>
+  </ol>
+  <div class="sn-key" aria-hidden="true"><span class="sn-dot s-done"></span> done <span class="sn-dot s-part"></span> needs attention <span class="sn-dot s-err"></span> fix <span class="sn-dot s-none"></span> not started</div>
+</nav>
+<main id="main">
   <p class="lede">Build a plan for grades 9–12 that meets Woodward Academy and State of Georgia graduation requirements. Dropdowns update as courses are chosen, based on the prerequisites in the <em>2026–2027 Scheduling &amp; Curriculum Guide</em>.</p>
 
   <!-- STEP 1 -->
@@ -147,10 +168,11 @@
       <button type="button" class="btn ghost" id="loadDraft">Open a saved draft…</button>
       <button type="button" class="btn link" id="resetAll">Start over</button>
     </div>
-    <p class="help small">Drafts are saved as <b>encrypted <code>.placement</code> files</b> in <b>your own Google Drive</b> (folder “WA Course Planner Drafts”). Only this app, while you are signed in, can read them. They are never shared with students and nothing is saved to this computer’s Downloads folder.</p>
+    <p class="help small">Drafts are saved <b>privately in your own Google Drive</b>, in a folder named “WA Course Planner Drafts.” They are never shared with students and nothing is saved to this computer’s Downloads folder.</p>
     <div id="submitMsg" class="submitmsg" role="status" aria-live="polite"></div>
   </section>
 </main>
+</div>
 
 <footer class="foot"><div class="wrap">
   <img src="assets/img/wordmark-red.png" alt="Woodward Academy" class="foot-mark">
