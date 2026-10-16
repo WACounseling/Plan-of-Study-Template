@@ -365,6 +365,70 @@
     if (!ip.length && !P.errs.length) host.insertBefore(h('div', { class: 'ok-line', text: '✓ All graduation requirements are met and the plan is ready to submit.' }), host.firstChild);
     $('#overrideBox').hidden = !P.errs.length;
     if (!P.errs.length) { state.override.on = false; $('#ovOn').checked = false; }
+    renderNav(P);
+  }
+
+
+  /* ---------------- left sidebar: status dots + scroll-spy ---------------- */
+  function setDot(key, st, label) {
+    const el = document.querySelector('[data-dot="' + key + '"]'); if (!el) return;
+    el.className = 'sn-dot s-' + st; el.title = label; el.setAttribute('aria-label', label);
+  }
+  function renderNav(P) {
+    const ip = infoProblems();
+    setDot('info', ip.length ? 'part' : 'done', ip.length ? 'Needs: ' + ip.join(', ') : 'Complete');
+    const pr = state.prior;
+    const hasPrior = +pr.psCredit > 0 || pr.civics8 || pr.gat || pr.placement || pr.msLang || pr.msMath !== 'alg1' || pr.transfers.length > 0;
+    setDot('prior', hasPrior ? 'done' : 'none', hasPrior ? 'Prior credit / placement entered' : 'Optional — nothing entered');
+    let done = 0, bad = 0, sel = 0;
+    E.GRADES.forEach(g => {
+      const hasSel = E.ALL_SLOTS.some(s => state.plan[g][s.k].f || state.plan[g][s.k].s);
+      const fix = P.load[g].filter(x => x.lvl === 'error').length + Object.values(P.validation).filter(v => v.grade === g && v.state === 'blocked').length;
+      const st = !hasSel ? 'none' : fix ? 'err' : 'done';
+      if (hasSel) sel++; if (st === 'done') done++; if (st === 'err') bad++;
+      setDot('g' + g, st, !hasSel ? 'Not started' : fix ? fix + ' item(s) to fix' : 'Course load OK');
+    });
+    setDot('grades', bad ? 'err' : done === 4 ? 'done' : sel ? 'part' : 'none', bad ? 'Some grades need fixes' : done === 4 ? 'All four grades planned' : sel ? 'In progress' : 'Not started');
+    const hasCoc = state.cocurr.some(c => c.name);
+    setDot('coc', hasCoc ? 'done' : 'none', hasCoc ? 'Activities entered' : 'Optional — nothing entered');
+    setDot('notes', state.info.notes.trim() ? 'done' : 'none', state.info.notes.trim() ? 'Notes entered' : 'Optional — no notes');
+    const t = P.tracker, n = t.areas.filter(a => a.met).length, b = $('#snTrk');
+    b.textContent = n + '/' + t.areas.length; b.className = 'sn-badge ' + (n === t.areas.length ? 's-done' : n ? 's-part' : 's-err');
+    b.title = n + ' of ' + t.areas.length + ' graduation requirements complete';
+    const ready = !ip.length && !P.errs.length;
+    setDot('submit', ready ? 'done' : (P.errs.length ? 'err' : 'part'), ready ? 'Ready to submit' : P.errs.length ? P.errs.length + ' plan item(s) to resolve' : 'Complete Step 1');
+    $('#snName').textContent = state.info.studentName.trim() || 'New course plan';
+    $('#snGrad').textContent = state.info.classOf ? 'Graduating Spring ' + state.info.classOf : 'Choose a graduation year in Step 1';
+  }
+  function initNav() {
+    const ids = ['s-info', 's-prior', 's-grades', 'grade-9', 'grade-10', 'grade-11', 'grade-12', 's-cocurr', 's-notes', 's-tracker', 's-ref', 's-submit'];
+    const links = {}; $$('#sidenav a[data-spy]').forEach(a => { links[a.dataset.spy] = a; });
+    $$('#sidenav a[href^="#"]').forEach(a => a.addEventListener('click', e => {
+      const id = a.getAttribute('href').slice(1), t = document.getElementById(id); if (!t) return;
+      e.preventDefault(); if (id === 's-ref') t.open = true;
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      try { history.replaceState(null, '', '#' + id); } catch (x) { /* ignore */ }
+      mark(id === 's-grades' ? 's-grades' : id);
+    }));
+    const vis = new Set();
+    function mark(id) {
+      Object.keys(links).forEach(k => links[k].classList.remove('active'));
+      const grade = id && id.indexOf('grade-') === 0 ? id : null;
+      if (grade) { links[grade].classList.add('active'); links['s-grades'].classList.add('active'); }
+      else if (id && links[id]) links[id].classList.add('active');
+      const cur = grade ? links[grade] : (id && links[id]); if (cur && window.innerWidth <= 1040 && cur.scrollIntoView) { try { cur.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (x) { /* ignore */ } }
+    }
+    function pick() {
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) return mark('s-submit');
+      const g = ids.filter(i => i.indexOf('grade-') === 0 && vis.has(i))[0];
+      mark(g || ids.filter(i => vis.has(i))[0] || null);
+    }
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(entries => { entries.forEach(en => { if (en.isIntersecting) vis.add(en.target.id); else vis.delete(en.target.id); }); pick(); }, { rootMargin: '-12% 0px -62% 0px' });
+      ids.forEach(i => { const el = document.getElementById(i); if (el) io.observe(el); });
+      window.addEventListener('scroll', () => { if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) mark('s-submit'); }, { passive: true });
+    }
+    mark('s-info');
   }
 
   /* ---------------- submit ---------------- */
@@ -446,10 +510,9 @@
     const msg = $('#submitMsg'); msg.innerHTML = ''; if (needSignIn(msg)) return;
     const btn = $('#saveDraft'); btn.disabled = true; const old = btn.textContent; btn.textContent = 'Saving…';
     try {
-      const initials = (state.info.studentName.trim().split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase()).join('.') || 'Unnamed') + '.';
-      const name = 'Placement — ' + initials + (state.info.classOf ? ' — Class of ' + state.info.classOf : '') + ' — ' + (state.info.date || '') + '.placement';
+      const name = 'DRAFT — ' + (state.info.studentName.trim() || 'Unnamed student') + ' — ' + (state.info.date || '') + '.json';
       const r = await WA.google.saveDraft(JSON.parse(JSON.stringify(state)), name);
-      msg.innerHTML = '<div class="ok"><b>✓ Draft ' + (r.updated ? 'updated' : 'saved') + ' in your Google Drive</b> (folder “WA Course Planner Drafts”): ' + esc(r.name) + '<br><small>Encrypted: only this app, signed in as you, can read it. It was not downloaded to this computer.</small></div>';
+      msg.innerHTML = '<div class="ok"><b>✓ Draft ' + (r.updated ? 'updated' : 'saved') + ' in your Google Drive</b> (folder “WA Course Planner Drafts”): ' + esc(r.name) + '<br><small>Only you can open it. It was not downloaded to this computer.</small></div>';
     } catch (e) { msg.innerHTML = '<div class="bad"><b>Could not save the draft.</b> ' + esc(e.message || String(e)) + '</div>'; }
     finally { btn.disabled = false; btn.textContent = old; }
   }
@@ -458,7 +521,7 @@
     let list;
     try { list = await WA.google.listDrafts(); } catch (e) { msg.innerHTML = '<div class="bad"><b>Could not read your drafts.</b> ' + esc(e.message || String(e)) + '</div>'; return; }
     const d = $('#dlg'), body = $('#dlgBody'), act = $('#dlgActions'); act.innerHTML = '';
-    body.innerHTML = '<h3>Your saved drafts</h3>' + (list.length ? '<p class="muted">Encrypted .placement files stored privately in your Google Drive. File names show initials only.</p>' : '<p>No saved drafts yet. Use “Save draft to my Google Drive” first.</p>');
+    body.innerHTML = '<h3>Your saved drafts</h3>' + (list.length ? '<p class="muted">Stored privately in your Google Drive.</p>' : '<p>No saved drafts yet. Use “Save draft to my Google Drive” first.</p>');
     const wrap = h('div', { class: 'draftlist' });
     list.forEach(f => {
       const row = h('div', { class: 'draftrow' }, h('div', {}, h('b', { text: f.name.replace(/\.(json|placement)$/, '') }), h('small', { text: 'Last saved ' + new Date(f.modifiedTime).toLocaleString() })));
@@ -529,7 +592,7 @@
     $('#ovOn').addEventListener('change', e => { state.override.on = e.target.checked; save(); });
     $('#ovReason').addEventListener('input', e => { state.override.reason = e.target.value; save(); });
     ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => $('[data-bind="' + p + '"]').addEventListener('input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
-    fullRender(); initAuth();
+    fullRender(); initAuth(); initNav();
   }
   window.WA.app = { buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
