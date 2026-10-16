@@ -195,3 +195,44 @@ input[readonly] { background: var(--mist); color: #444; }
 .draftrow small { margin-top: 2px; }
 .draftbtns { display: flex; gap: 8px; flex: none; }
 .draftbtns .btn { padding: 7px 12px; font-size: 12.5px; }
+
+/* ---------- left sidebar navigation ---------- */
+.layout { max-width: 1380px; margin: 0 auto; padding: 0 20px; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 30px; align-items: start; }
+.layout > main { min-width: 0; }
+.site-head .wrap, .sb-in.wrap, .foot .wrap { max-width: 1380px; }
+.sidenav { position: sticky; top: 14px; margin-top: 22px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); border-top: 4px solid var(--navy); padding: 14px 10px 12px; max-height: calc(100vh - 86px); overflow-y: auto; }
+.sn-student { padding: 2px 10px 12px; border-bottom: 1px solid var(--gray); margin-bottom: 8px; }
+.sn-name { display: block; font-weight: 700; color: var(--navy); font-size: 14px; line-height: 1.25; word-break: break-word; }
+.sn-grad { display: block; font-size: 11.5px; color: var(--slate); font-weight: 600; margin-top: 2px; }
+.sn-list, .sn-sub { list-style: none; margin: 0; padding: 0; }
+.sn-list a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 600; border-left: 3px solid transparent; }
+.sn-list a:hover { background: var(--mist); }
+.sn-list a.active { background: #f7eef0; border-left-color: var(--red); color: var(--red-dark); }
+.sn-num { width: 22px; height: 22px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.sn-list a.active .sn-num { background: var(--red); }
+.sn-text { flex: 1; line-height: 1.25; }
+.sn-sub { margin: 0 0 4px 34px; border-left: 2px solid var(--gray); }
+.sn-sub a { font-size: 12.5px; font-weight: 500; padding: 6px 8px 6px 10px; border-left: 0; }
+.sn-sub a.active { background: #f7eef0; color: var(--red-dark); font-weight: 700; }
+.sn-dot { width: 16px; height: 16px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; line-height: 1; vertical-align: -3px; }
+.sn-dot.s-none { background: #fff; border: 2px solid var(--gray); }
+.sn-dot.s-done { background: var(--green); } .sn-dot.s-done::before { content: '\2713'; }
+.sn-dot.s-part { background: var(--gold); color: #3a2a00; } .sn-dot.s-part::before { content: '\2026'; }
+.sn-dot.s-err { background: var(--coral); } .sn-dot.s-err::before { content: '!'; }
+.sn-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: var(--mist); color: var(--navy); flex: none; }
+.sn-badge.s-done { background: var(--green); color: #fff; } .sn-badge.s-part { background: var(--gold); color: #3a2a00; } .sn-badge.s-err { background: var(--coral); color: #fff; }
+.sn-key { margin: 10px 10px 0; padding-top: 10px; border-top: 1px solid var(--gray); font-size: 10.5px; color: var(--muted); line-height: 2; }
+.sn-key .sn-dot { width: 11px; height: 11px; font-size: 0; margin: 0 2px 0 4px; border-width: 1.5px; }
+.sn-key .sn-dot::before { content: none !important; }
+@media (max-width: 1040px) {
+  .layout { grid-template-columns: 1fr; gap: 0; padding: 0; }
+  .layout > main { padding: 0 20px; }
+  html { scroll-padding-top: 64px; }
+  .sidenav { position: sticky; top: 0; z-index: 45; margin: 0; border-radius: 0; border-top: 0; border-bottom: 3px solid var(--red); padding: 6px 10px; max-height: none; overflow-x: auto; overflow-y: hidden; }
+  .sn-student, .sn-key, .sn-sub { display: none; }
+  .sn-list { display: flex; gap: 4px; white-space: nowrap; }
+  .sn-list > li { flex: none; }
+  .sn-list a { padding: 7px 10px; border-left: 0; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; }
+  .sn-list a.active { border-bottom-color: var(--red); }
+}
+@media print { .sidenav { display: none !important; } .layout { display: block; } }
