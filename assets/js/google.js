@@ -7,8 +7,7 @@
   const WA = window.WA = window.WA || {};
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
-  const DRIVE_APPDATA = 'https://www.googleapis.com/auth/drive.appdata';
-  const SCOPE = 'openid email profile ' + DRIVE_FILE + ' ' + DRIVE_APPDATA;
+  const SCOPE = 'openid email profile ' + DRIVE_FILE;
 
   let tokenClient = null, pending = null, token = null, expiresAt = 0;
   const G = { user: null, onChange: () => {} };
@@ -26,7 +25,7 @@
         if (!pending) return; const p = pending; pending = null;
         if (r.error) return p.rej(new Error(r.error_description || r.error));
         const o = window.google.accounts.oauth2;
-        if (o.hasGrantedAllScopes && !o.hasGrantedAllScopes(r, DRIVE_FILE, DRIVE_APPDATA)) return p.rej(new Error('Please allow all requested Google Drive permissions (creating Docs and the private app-data area used for encrypted drafts), then sign in again.'));
+        if (o.hasGrantedAllScopes && !o.hasGrantedAllScopes(r, DRIVE_FILE)) return p.rej(new Error('Please allow access to create Google Docs in your Drive, then sign in again.'));
         token = r.access_token; expiresAt = Date.now() + (Number(r.expires_in || 3600) - 90) * 1000; p.res(token);
       },
       error_callback: e => { if (pending) { const p = pending; pending = null; p.rej(new Error(e && e.type === 'popup_closed' ? 'The Google sign-in window was closed.' : (e && e.message) || 'Google sign-in was blocked. Allow pop-ups for this site and try again.')); } }
@@ -62,7 +61,7 @@
   };
   G.signOut = function () {
     try { if (token && gisReady()) window.google.accounts.oauth2.revoke(token, () => {}); } catch (e) { /* ignore */ }
-    token = null; expiresAt = 0; G.user = null; G.draftId = null; cryptoKey = null; G.onChange(null);
+    token = null; expiresAt = 0; G.user = null; G.draftId = null; G.onChange(null);
   };
   async function validToken() {
     if (token && Date.now() < expiresAt) return token;
@@ -208,54 +207,18 @@
     return { b, body: '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + b + '\r\nContent-Type: ' + (type || 'application/json') + '; charset=UTF-8\r\n\r\n' + content + '\r\n--' + b + '--' };
   }
 
-  /* ---------- encryption: AES-256-GCM, key kept in this app's hidden Drive app-data folder ---------- */
-  let cryptoKey = null;
-  const AAD = () => new TextEncoder().encode('wa-course-planner|placement|v1');
-  const b64 = u8 => { let s = ''; u8.forEach(b => { s += String.fromCharCode(b); }); return btoa(s); };
-  const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-  const subtle = () => { const c = window.crypto; if (!c || !c.subtle) throw new Error('This browser cannot do the encryption needed for drafts. Use a current Chrome, Edge, Safari or Firefox over https.'); return c.subtle; };
-  async function appKey(tok) {
-    if (cryptoKey) return cryptoKey;
-    const sc = subtle();
-    const q = "name='wa-draft-key.json' and trashed=false";
-    const listKey = () => api('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=' + encodeURIComponent(q) + '&orderBy=createdTime&fields=files(id)&pageSize=5', {}, tok);
-    let r = await listKey(), id = r.files && r.files[0] && r.files[0].id;
-    if (!id) {
-      const rnd = new Uint8Array(32); window.crypto.getRandomValues(rnd);
-      const m = multipart({ name: 'wa-draft-key.json', parents: ['appDataFolder'], mimeType: 'application/json' }, JSON.stringify({ v: 1, k: b64(rnd) }));
-      const f = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + m.b }, body: m.body }, tok);
-      r = await listKey(); id = r.files && r.files[0] ? r.files[0].id : f.id;
-      if (id !== f.id) { try { await api('https://www.googleapis.com/drive/v3/files/' + f.id, { method: 'DELETE' }, tok); } catch (e) { /* ignore */ } }
-    }
-    const kf = await api('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media', {}, tok);
-    cryptoKey = await sc.importKey('raw', unb64(kf.k), 'AES-GCM', false, ['encrypt', 'decrypt']);
-    return cryptoKey;
-  }
-  async function seal(obj, tok) {
-    const key = await appKey(tok); const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const ct = await subtle().encrypt({ name: 'AES-GCM', iv, additionalData: AAD() }, key, new TextEncoder().encode(JSON.stringify(obj)));
-    return JSON.stringify({ format: 'wa-placement', v: 1, alg: 'AES-256-GCM', iv: b64(iv), data: b64(new Uint8Array(ct)) });
-  }
-  async function unseal(env, tok) {
-    if (!env || env.format !== 'wa-placement') return env; // older unencrypted draft
-    try {
-      const key = await appKey(tok);
-      const pt = await subtle().decrypt({ name: 'AES-GCM', iv: unb64(env.iv), additionalData: AAD() }, key, unb64(env.data));
-      return JSON.parse(new TextDecoder().decode(pt));
-    } catch (e) { throw new Error('This .placement file could not be opened. It can only be read by this app while signed in as the counselor who saved it (and it may have been altered).'); }
-  }
   G.saveDraft = async function (state, name) {
     if (!G.user) throw new Error('Please sign in with Google first.');
-    const tok = await validToken(); const json = await seal(state, tok);
+    const tok = await validToken(); const json = JSON.stringify(state);
     if (G.draftId) {
       try {
-        const m = multipart({ name }, json, 'application/octet-stream');
+        const m = multipart({ name }, json);
         const f = await api('https://www.googleapis.com/upload/drive/v3/files/' + G.draftId + '?uploadType=multipart&fields=id,name', { method: 'PATCH', headers: { 'Content-Type': 'multipart/related; boundary=' + m.b }, body: m.body }, tok);
         return { id: f.id, name: f.name || name, updated: true };
       } catch (e) { if (e.status !== 404 && e.status !== 403) throw e; G.draftId = null; /* file was deleted — save a new one */ }
     }
     const folder = await draftFolder(tok);
-    const m = multipart({ name, parents: [folder], mimeType: 'application/octet-stream', appProperties: { waDraft: '1', waEncrypted: '1' } }, json, 'application/octet-stream');
+    const m = multipart({ name, parents: [folder], mimeType: 'application/json', appProperties: { waDraft: '1' } }, json);
     const f = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + m.b }, body: m.body }, tok);
     G.draftId = f.id; return { id: f.id, name: f.name || name, updated: false };
   };
@@ -268,8 +231,8 @@
   };
   G.loadDraft = async function (id) {
     const tok = await validToken();
-    const raw = await api('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media', {}, tok);
-    const data = await unseal(raw, tok);
+    const data = await api('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media', {}, tok);
+    if (data && data.format === 'wa-placement') throw new Error('This is an older encrypted .placement file from a test version and can no longer be opened. Please delete it from the WA Course Planner Drafts folder.');
     G.draftId = id; return data;
   };
   G.trashDraft = async function (id) {
