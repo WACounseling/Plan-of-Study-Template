@@ -4,6 +4,10 @@
 (function (root) {
   const R = {
     updated: 'October 2026',
+    disclaimer: {
+      title: 'Projected Schedule — Subject to Change',
+      text: 'This plan is a projection only and does not guarantee placement in any course or course availability. It may change based on student interests, academic performance, prerequisites and approvals, course availability and enrollment, scheduling, and course changes or sequence restructuring. The current Scheduling & Curriculum Guide governs. Please review this plan with your counselor each year.'
+    },
     sections: [
       {
         title: 'Woodward Academy Graduation Requirements', col: 0,
