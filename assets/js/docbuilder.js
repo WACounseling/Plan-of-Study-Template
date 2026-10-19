@@ -31,6 +31,11 @@
     return p(pre + '<b>' + esc(name) + '</b>' + (lv ? esc(lv[0]) : ''), 'font-size:7.5pt;margin-bottom:1pt;');
   }
 
+  const DEFAULT_DISCLAIMER = {
+    title: 'Projected Schedule — Subject to Change',
+    text: 'This plan is a projection only and does not guarantee placement in any course or course availability. It may change based on student interests, academic performance, prerequisites and approvals, course availability and enrollment, scheduling, and course changes or sequence restructuring. The current Scheduling & Curriculum Guide governs. Please review this plan with your counselor each year.'
+  };
+
   function buildHtml(d) {
     const out = [];
     /* header */
@@ -101,7 +106,7 @@
     notes.forEach(n => out.push(p('<b style="color:' + C.NAVY + ';">' + esc(n[0]) + ':</b>  ' + esc(n[1]), 'font-size:6.8pt;margin-top:1pt;margin-bottom:1pt;')));
 
     /* projected-schedule disclaimer (bottom of page 1) */
-    const disc = (d.reference && d.reference.disclaimer) || null;
+    const disc = (d.reference && d.reference.disclaimer) || DEFAULT_DISCLAIMER;
     if (disc) {
       out.push(gap(4));
       out.push(sectionTitle(disc.title.toUpperCase()));
@@ -124,6 +129,6 @@
   }
 
   const WA = root.WA = root.WA || {};
-  WA.docbuilder = { buildHtml };
+  WA.docbuilder = { buildHtml, DEFAULT_DISCLAIMER };
   if (typeof module !== 'undefined') module.exports = WA.docbuilder;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
