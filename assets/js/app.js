@@ -6,7 +6,22 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-d';
+  const BUILD = '2026.10.19-e';
+  // every file must match the version this app.js expects; otherwise some files on the site are stale
+  const EXPECT = { 'catalog.js': '1', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'docbuilder.js': '5', 'google.js': '7' };
+  const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft'];
+  function syncProblems() {
+    const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
+    if (!bad.includes('google.js') && NEEDS.some(f => typeof (WA.google || {})[f] !== 'function')) bad.push('google.js');
+    return bad;
+  }
+  function showSync() {
+    const bad = syncProblems(); let el = document.getElementById('syncwarn');
+    if (!bad.length) { if (el) el.remove(); return false; }
+    if (!el) { el = document.createElement('div'); el.id = 'syncwarn'; el.className = 'syncwarn'; el.setAttribute('role', 'alert'); document.body.insertBefore(el, document.body.firstChild); }
+    el.innerHTML = '<b>Some site files are out of date or did not load:</b> ' + bad.map(esc).join(', ') + '. Upload the latest version of these files to GitHub (use the same batch as the newest <code>app.js</code>), wait a minute, then hard-refresh this page (Ctrl+Shift+R).';
+    return true;
+  }
 
   function h(tag, attrs) {
     const el = document.createElement(tag);
@@ -479,6 +494,7 @@
   }
   async function submit() {
     const P = E.problems(state); const msg = $('#submitMsg'); msg.innerHTML = '';
+    if (showSync()) { msg.innerHTML = '<div class="bad"><b>Cannot submit yet:</b> some site files are out of date (' + esc(syncProblems().join(', ')) + '). See the red notice at the top of the page.</div>'; return; }
     const ip = infoProblems();
     if (ip.length) { msg.innerHTML = '<div class="bad"><b>Please complete Step 1:</b> ' + esc(ip.join(', ')) + '.</div>'; $('#s-info').scrollIntoView({ behavior: 'smooth' }); markBad(); return; }
     if (P.errs.length) {
@@ -602,8 +618,8 @@
     $('#ovOn').addEventListener('change', e => { state.override.on = e.target.checked; save(); });
     $('#ovReason').addEventListener('input', e => { state.override.reason = e.target.value; save(); });
     ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => $('[data-bind="' + p + '"]').addEventListener('input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
-    fullRender(); initAuth(); initNav();
+    fullRender(); initAuth(); initNav(); showSync();
   }
-  window.WA.app = { buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
+  window.WA.app = { syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
