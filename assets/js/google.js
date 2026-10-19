@@ -5,6 +5,7 @@
 (function () {
   'use strict';
   const WA = window.WA = window.WA || {};
+  (WA.versions = WA.versions || {})['google.js'] = '7';
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
   const SCOPE = 'openid email profile ' + DRIVE_FILE;
@@ -26,29 +27,43 @@
         if (r.error) return p.rej(new Error(r.error_description || r.error));
         const o = window.google.accounts.oauth2;
         if (o.hasGrantedAllScopes && !o.hasGrantedAllScopes(r, DRIVE_FILE)) return p.rej(new Error('Please allow access to create Google Docs in your Drive, then sign in again.'));
+        if (!r.access_token) return p.rej(new Error('Google did not return a sign-in token. Please click “Sign in with Google” again.'));
         token = r.access_token; expiresAt = Date.now() + (Number(r.expires_in || 3600) - 90) * 1000; p.res(token);
       },
       error_callback: e => { if (pending) { const p = pending; pending = null; p.rej(new Error(e && e.type === 'popup_closed' ? 'The Google sign-in window was closed.' : (e && e.message) || 'Google sign-in was blocked. Allow pop-ups for this site and try again.')); } }
     });
     return true;
   }
-  function request(prompt) {
+  const HKEY = 'wa_signin_hint';
+  let memHint = '';
+  const getHint = () => { try { return sessionStorage.getItem(HKEY) || memHint; } catch (e) { return memHint; } };
+  const setHint = v => { memHint = v || ''; try { if (v) sessionStorage.setItem(HKEY, v); else sessionStorage.removeItem(HKEY); } catch (e) { /* storage blocked: memory only */ } };
+  function request(prompt, hint) {
     return new Promise((res, rej) => {
       if (!configured()) return rej(new Error('Google sign-in is not configured yet. An administrator must add GOOGLE_CLIENT_ID in assets/js/config.js.'));
       if (!init()) return rej(new Error('Google sign-in is still loading. Wait a moment and try again (or check your connection).'));
-      pending = { res, rej }; tokenClient.requestAccessToken({ prompt });
+      pending = { res, rej }; tokenClient.requestAccessToken(hint ? { prompt, hint } : { prompt });
     });
   }
 
+  const EXPIRED = 'Your Google sign-in has expired or was not accepted (this happens after about an hour). Please click “Sign in with Google” again in Step 1, then retry. Your plan is still here.';
   async function api(url, opts, tok) {
     const r = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization: 'Bearer ' + (tok || token) }, (opts && opts.headers) || {}) }));
     let data = null; const text = await r.text(); try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text }; }
-    if (!r.ok) { const m = (data && data.error && (data.error.message || data.error)) || r.statusText; const err = new Error(String(m)); err.status = r.status; throw err; }
+    if (!r.ok) {
+      if (r.status === 401) { const err = new Error(EXPIRED); err.status = 401; err.auth = true; G.expire(); throw err; }
+      const m = (data && data.error && (data.error.message || data.error)) || r.statusText; const err = new Error(String(m)); err.status = r.status; throw err;
+    }
     return data;
   }
+  // forget the (expired) token and show the signed-out state, without revoking anything
+  G.expire = function () { token = null; expiresAt = 0; const had = !!G.user; G.user = null; G.draftId = null; if (had) G.onChange(null); };
+  // call at the start of a button click so a needed refresh pop-up is allowed by the browser
+  G.ensureToken = async function () { if (!G.user) throw new Error('Please sign in with Google first.'); await validToken(); };
 
   G.signIn = async function () {
-    const t = await request('select_account');
+    const hint = getHint();
+    const t = await request(hint ? '' : 'select_account', hint); // after the first sign-in, skip the account chooser
     const u = await api('https://www.googleapis.com/oauth2/v3/userinfo', {}, t);
     const email = String(u.email || '').toLowerCase(), dom = String(CFG.COUNSELOR_EMAIL_DOMAIN || '').toLowerCase();
     if (u.email_verified === false) throw new Error('That Google account\u2019s email is not verified.');
@@ -56,16 +71,16 @@
       try { window.google.accounts.oauth2.revoke(t, () => {}); } catch (e) { /* ignore */ }
       token = null; throw new Error('Please sign in with your @' + dom + ' account (you used ' + email + ').');
     }
-    G.user = { email, name: u.name || email, picture: u.picture || '' };
+    G.user = { email, name: u.name || email, picture: u.picture || '' }; setHint(email);
     G.onChange(G.user); return G.user;
   };
   G.signOut = function () {
     try { if (token && gisReady()) window.google.accounts.oauth2.revoke(token, () => {}); } catch (e) { /* ignore */ }
-    token = null; expiresAt = 0; G.user = null; G.draftId = null; G.onChange(null);
+    token = null; expiresAt = 0; G.user = null; G.draftId = null; setHint(''); G.onChange(null);
   };
   async function validToken() {
     if (token && Date.now() < expiresAt) return token;
-    const t = await request(''); // refresh (may show a brief pop-up)
+    const t = await request('', G.user && G.user.email); // refresh quietly for the same account (may flash a pop-up)
     return t;
   }
 
