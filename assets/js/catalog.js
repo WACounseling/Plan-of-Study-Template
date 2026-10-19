@@ -260,6 +260,7 @@
   const LEVEL_RANK = { '': 0, CP: 1, EP: 2, HP: 3, AP: 4 };
 
   const WA = root.WA = root.WA || {};
+  (WA.versions = WA.versions || {})['catalog.js'] = '1';
   WA.catalog = { list: D, by: BY, DEPTS, LANGS, CORE, LEVEL_RANK };
   if (typeof module !== 'undefined') module.exports = WA.catalog;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
