@@ -243,3 +243,6 @@ input[readonly] { background: var(--mist); color: #444; }
 .disclaimer p { margin: 0; font-size: 12.5px; color: #333; line-height: 1.5; max-width: 900px; }
 
 .foot .build { color: #9a9a9a; font-size: 11px; }
+
+.syncwarn { background: var(--coral-bg); border-bottom: 3px solid var(--coral); color: #5a1512; padding: 10px 20px; font-size: 13px; text-align: center; position: sticky; top: 0; z-index: 90; }
+.syncwarn code { background: #fff; padding: 1px 5px; border-radius: 4px; }
