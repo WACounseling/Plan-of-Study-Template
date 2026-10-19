@@ -6,9 +6,9 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-f';
+  const BUILD = '2026.10.19-g';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '2', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'planio.js': '1', 'docbuilder.js': '5', 'google.js': '7' };
+  const EXPECT = { 'catalog.js': '2', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'planio.js': '1', 'combo.js': '1', 'docbuilder.js': '6', 'google.js': '8' };
   const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft'];
   function syncProblems() {
     const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
@@ -100,7 +100,7 @@
       const rowFor = (slot, label, summer) => {
         selRefs[g][slot.k] = {};
         const mk = half => {
-          const sel = h('select', { 'aria-label': ORD[g] + ' grade ' + label + (summer ? '' : half ? ' spring' : ' fall or full year') });
+          const sel = h('select', { 'data-cb': '1', 'aria-label': ORD[g] + ' grade ' + label + (summer ? '' : half ? ' spring' : ' fall or full year') });
           sel.addEventListener('change', () => onPick(g, slot.k, half, sel.value, !!summer));
           selRefs[g][slot.k][half] = sel; return sel;
         };
@@ -204,6 +204,7 @@
     renderTracker(P.tracker);
     renderReadiness(P);
     if (userAction) celebrateDiff(P.tracker); else prevMet = metSet(P.tracker);
+    if (WA.combo) WA.combo.refreshAll();
     save();
   }
   const stClass = v => (!v ? '' : v.state === 'blocked' ? 'err' : v.state === 'approval' ? 'warn' : '');
@@ -301,13 +302,14 @@
     });
     return (equivHTML = o);
   }
-  function renderTransfers() {
+  function renderTransfers() { renderTransfersRaw(); if (WA.combo) WA.combo.enhanceAll(); }
+  function renderTransfersRaw() {
     const host = $('#transferRows'); host.innerHTML = '';
     state.prior.transfers.forEach((t, i) => {
       const upd = () => update(true);
       const title = h('input', { type: 'text', value: t.title || '', placeholder: 'e.g., Biology — Lakeview HS' });
       title.addEventListener('input', () => { t.title = title.value; save(); });
-      const eq = h('select', { html: equivOptions() }); eq.value = t.equiv || '';
+      const eq = h('select', { html: equivOptions(), 'data-cb': '1' }); eq.value = t.equiv || '';
       const area = h('select', { html: AREAS.map(a => '<option value="' + a[0] + '">' + a[1] + '</option>').join('') }); area.value = t.area || 'elec'; area.disabled = !!t.equiv;
       const lang = h('select', { html: Object.keys(CAT.LANGS).map(k => '<option value="' + k + '">' + CAT.LANGS[k] + '</option>').join('') }); lang.value = t.lang || 'fr';
       const cr = h('select', { html: [0.5, 1, 1.5, 2, 2.5, 3, 4].map(n => '<option value="' + n + '">' + n + '</option>').join('') }); cr.value = t.cr || 1;
@@ -332,12 +334,13 @@
     const cats = []; COC.list.forEach(a => { if (!cats.includes(a.cat)) cats.push(a.cat); });
     return '<option value="">— choose an activity —</option>' + cats.map(c => '<optgroup label="' + esc(c) + '">' + COC.list.filter(a => a.cat === c).map(a => '<option value="' + esc(a.name) + '">' + esc(a.name) + '</option>').join('') + '</optgroup>').join('') + '<option value="__other">Other (write in)…</option>';
   }
-  function renderCoc() {
+  function renderCoc() { renderCocRaw(); if (WA.combo) WA.combo.enhanceAll(); }
+  function renderCocRaw() {
     const host = $('#cocRows'); host.innerHTML = '';
     if (!state.cocurr.length) state.cocurr.push({ name: '', status: 'active' });
     state.cocurr.forEach((c, i) => {
       const known = !c.name || COC.list.some(a => a.name === c.name);
-      const act = h('select', { html: cocOptions(), 'aria-label': 'Activity' }); act.value = known ? c.name : '__other';
+      const act = h('select', { html: cocOptions(), 'data-cb': '1', 'aria-label': 'Activity' }); act.value = known ? c.name : '__other';
       const other = h('input', { type: 'text', placeholder: 'Activity name', value: known ? '' : c.name }); other.style.display = known ? 'none' : '';
       const stat = h('select', { html: COC.STATUS.map(s => '<option value="' + s.v + '">' + s.label + '</option>').join(''), 'aria-label': 'Participation' }); stat.value = c.status || 'active';
       const hint = h('small', { text: noteFor(c.name) });
@@ -452,6 +455,48 @@
     mark('s-info');
   }
 
+
+  /* ---------------- dropdown chips for the Google Doc (max 50 options each) ---------------- */
+  const CHIP_MAX = 50, CORE_DEPTS = ['eng', 'math', 'ss', 'sci', 'wl'];
+  function chipOptions(g, slotKey, half, current) {
+    const o = E.optionsFor(state, g, slotKey, half); let items = [];
+    o.groups.forEach(gr => gr.items.forEach(i => items.push({ value: i.value, dept: i.dept, appr: i.state === 'approval' })));
+    if (/^e\d$/.test(slotKey)) items = items.filter(i => CORE_DEPTS.indexOf(i.dept) < 0 || i.value === current);
+    const hasCur = !!current && items.some(i => i.value === current), room = CHIP_MAX - 1 - (current && !hasCur ? 1 : 0);
+    if (items.length > room) {
+      const byDept = {}; items.forEach(i => { (byDept[i.dept] = byDept[i.dept] || []).push(i); });
+      const depts = Object.keys(byDept), pick = new Set(); let r = 0;
+      while (pick.size < room && depts.some(d => byDept[d][r])) { depts.forEach(d => { if (byDept[d][r] && pick.size < room) pick.add(byDept[d][r]); }); r++; }
+      if (hasCur) { const cu = items.find(i => i.value === current); if (!pick.has(cu)) { const last = Array.from(pick).pop(); pick.delete(last); pick.add(cu); } }
+      items = items.filter(i => pick.has(i));
+    }
+    if (current && !hasCur && E.parseSel(current)) items.unshift({ value: current, appr: false });
+    const lab = v => { const p = E.parseSel(v); return p ? E.courseLabel(p.c, p.lv) : v; };
+    const opts = [{ value: '', label: '— none —', appr: false }].concat(items.map(i => ({ value: i.value, label: lab(i.value) + (i.appr ? ' ⚑' : ''), appr: i.appr })));
+    if (opts.length < 2) opts.push({ value: '__na', label: '(no other eligible courses)', appr: false });
+    return opts;
+  }
+  function buildChips() {
+    const defs = {}, rows = {}, sum = {};
+    const add = (key, title, g, slotKey, half, current) => { defs[key] = { title, selected: current || '', options: chipOptions(g, slotKey, half, current) }; };
+    E.GRADES.forEach(g => {
+      rows[g] = {};
+      E.ALL_SLOTS.forEach(s => {
+        const cell = state.plan[g][s.k], f = E.parseSel(cell.f), sp = E.parseSel(cell.s), kf = 'c' + g + s.k + 'f', ks = 'c' + g + s.k + 's', list = [];
+        if (f && f.c.t === 'Y') { add(kf, ORD[g] + ' · ' + s.label + ' (Fall / Full year)', g, s.k, 0, cell.f); list.push({ key: kf, sem: '' }); }
+        else if (!f && !sp) { add(kf, ORD[g] + ' · ' + s.label + ' (Fall / Full year)', g, s.k, 0, ''); list.push({ key: kf, sem: '' }); }
+        else { add(kf, ORD[g] + ' · ' + s.label + ' (Fall)', g, s.k, 0, cell.f); add(ks, ORD[g] + ' · ' + s.label + ' (Spring)', g, s.k, 1, cell.s); list.push({ key: kf, sem: 'Fall' }, { key: ks, sem: 'Spring' }); }
+        rows[g][s.k] = list;
+      });
+      if (g < 12) {
+        const a = state.summer[g].su1, b = state.summer[g].su2; sum[g] = [];
+        add('c' + g + 'su1', 'Summer after ' + ORD[g] + ' · Summer course 1', g, 'su1', 0, a); sum[g].push({ key: 'c' + g + 'su1', sem: '' });
+        if (a || b) { add('c' + g + 'su2', 'Summer after ' + ORD[g] + ' · Summer course 2', g, 'su2', 0, b); sum[g].push({ key: 'c' + g + 'su2', sem: '' }); }
+      }
+    });
+    return { defs, rows, sum };
+  }
+
   /* ---------------- submit ---------------- */
   function dialog(html, buttons) {
     return new Promise(res => {
@@ -462,10 +507,11 @@
   }
   function buildPayload(P) {
     const i = state.info; const t = P.tracker;
+    const CH = buildChips();
     const grades = E.GRADES.map(g => ({
       grade: g, label: ORD[g] + ' Grade', year: yearLabel(g),
-      rows: E.CORE_SLOTS.map(s => ({ label: s.label, cells: E.cellText(state, g, s.k), kind: 'core' })).concat(E.ELEC_SLOTS.map(s => ({ label: s.label, cells: E.cellText(state, g, s.k), kind: 'elec' }))),
-      summer: g < 12 ? E.summerText(state, g) : []
+      rows: E.CORE_SLOTS.map(s => ({ label: s.label, cells: E.cellText(state, g, s.k), kind: 'core', chips: CH.rows[g][s.k] })).concat(E.ELEC_SLOTS.map(s => ({ label: s.label, cells: E.cellText(state, g, s.k), kind: 'elec', chips: CH.rows[g][s.k] }))),
+      summer: g < 12 ? E.summerText(state, g) : [], summerChips: g < 12 ? CH.sum[g] : []
     }));
     const pr = state.prior, ms = [];
     if (+pr.psCredit > 0) ms.push('Physical Science (8th grade): ' + pr.psCredit + ' unit science credit');
@@ -481,7 +527,7 @@
       version: 2,
       student: { name: i.studentName.trim(), email: i.studentEmail.trim() }, counselor: { name: i.counselorName.trim(), email: (WA.google && WA.google.user ? WA.google.user.email : i.counselorEmail).trim() },
       date: i.date, dateText: new Date(i.date + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      classOf: i.classOf, gradText: i.classOf ? 'Spring ' + i.classOf : '', notes: i.notes.trim(), grades, prior: { ms, transfers: tr },
+      classOf: i.classOf, gradText: i.classOf ? 'Spring ' + i.classOf : '', notes: i.notes.trim(), grades, chipDefs: CH.defs, prior: { ms, transfers: tr },
       cocurr: state.cocurr.filter(c => c.name).map(c => { const a = COC.list.find(x => x.name === c.name); return { name: c.name, cat: a ? a.cat : 'Other', status: c.status === 'active' ? 'Currently participating' : 'Interested in exploring' }; }),
       tracker: {
         areas: t.areas.map(a => ({ key: a.key, label: a.label, have: a.have, req: a.req, status: a.status, detail: a.detail })),
@@ -632,7 +678,7 @@
     update(false);
   }
   function init() {
-    load(); initBindings(); buildGrades(); renderRef(); renderDisclaimer();
+    load(); initBindings(); buildGrades(); if (WA.combo) WA.combo.enhanceAll(); renderRef(); renderDisclaimer();
     const fp = document.querySelector('.foot p'); if (fp) fp.appendChild(h('span', { class: 'build', text: ' Build ' + BUILD + '.' }));
     $('#addTransfer').addEventListener('click', () => { state.prior.transfers.push({ title: '', equiv: '', area: 'elec', cr: 1, when: '9', lang: 'fr' }); renderTransfers(); update(true); });
     $('#addCoc').addEventListener('click', () => { state.cocurr.push({ name: '', status: 'active' }); renderCoc(); });
