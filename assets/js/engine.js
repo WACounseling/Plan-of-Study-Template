@@ -2,6 +2,7 @@
  * course-load rules, and graduation / credit tracking. Pure logic — no DOM. */
 (function (root) {
   const WA = root.WA = root.WA || {};
+  (WA.versions = WA.versions || {})['engine.js'] = '1';
   const CAT = WA.catalog || require('./catalog.js');
   const COC = WA.cocurr || (typeof require !== 'undefined' ? require('./cocurriculars.js') : null);
   const { by: BY, list: LIST, CORE, LEVEL_RANK, LANGS } = CAT;
