@@ -129,6 +129,7 @@
   }
 
   const WA = root.WA = root.WA || {};
+  (WA.versions = WA.versions || {})['docbuilder.js'] = '5';
   WA.docbuilder = { buildHtml, DEFAULT_DISCLAIMER };
   if (typeof module !== 'undefined') module.exports = WA.docbuilder;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
