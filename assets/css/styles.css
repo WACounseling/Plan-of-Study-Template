@@ -246,3 +246,8 @@ input[readonly] { background: var(--mist); color: #444; }
 
 .syncwarn { background: var(--coral-bg); border-bottom: 3px solid var(--coral); color: #5a1512; padding: 10px 20px; font-size: 13px; text-align: center; position: sticky; top: 0; z-index: 90; }
 .syncwarn code { background: #fff; padding: 1px 5px; border-radius: 4px; }
+
+.import-box { margin-top: 14px; padding: 12px 16px; border: 1.5px dashed var(--gray); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.import-box small { flex-basis: 100%; margin-top: 0; }
+.import-box .ok, .import-box .bad { flex-basis: 100%; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.import-box .ok { background: var(--green-bg); border: 1.5px solid var(--green); } .import-box .bad { background: var(--coral-bg); border: 1.5px solid var(--coral); }
