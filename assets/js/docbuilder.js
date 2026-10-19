@@ -14,7 +14,7 @@
   const p = (html, st) => '<p style="' + F + 'margin:0;line-height:1.1;' + (st || '') + '">' + html + '</p>';
   const cell = (inner, o) => {
     o = o || {};
-    return '<td width="' + (o.w ? px(o.w) : '') + '" valign="' + (o.v || 'top') + '" style="' + F + (o.w ? 'width:' + px(o.w) + 'px;' : '') +
+    return '<td width="' + (o.w ? px(o.w) : '') + '" valign="' + (o.v || 'top') + '" style="' + F + 'vertical-align:' + (o.v || 'top') + ';' + (o.w ? 'width:' + px(o.w) + 'px;' : '') +
       (o.bg ? 'background-color:' + o.bg + ';' : '') + 'border:' + (o.b === 0 ? 'none' : '0.5pt solid ' + (o.bc || C.GRAY)) + ';padding:' + (o.pad || '3pt 4pt') + ';' + (o.st || '') + '">' + inner + '</td>';
   };
   const table = (rows, o) => '<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:' + px(540) + 'px;' + ((o && o.st) || '') + '">' + rows.map(r => '<tr>' + r.join('') + '</tr>').join('') + '</table>';
@@ -100,14 +100,22 @@
     if (d.notes) notes.push(['Counselor notes', d.notes]);
     notes.forEach(n => out.push(p('<b style="color:' + C.NAVY + ';">' + esc(n[0]) + ':</b>  ' + esc(n[1]), 'font-size:6.8pt;margin-top:1pt;margin-bottom:1pt;')));
 
+    /* projected-schedule disclaimer (bottom of page 1) */
+    const disc = (d.reference && d.reference.disclaimer) || null;
+    if (disc) {
+      out.push(gap(4));
+      out.push(sectionTitle(disc.title.toUpperCase()));
+      out.push(p(esc(disc.text), 'font-size:6.8pt;color:' + C.INK + ';'));
+    }
+
     /* page 2 */
     out.push(p('[[PB]]', 'font-size:2pt;'));
     const ref = d.reference || { sections: [] };
     out.push(p('GRADUATION, SCHOLARSHIP &amp; ELIGIBILITY REFERENCE', 'font-size:12pt;font-weight:bold;color:' + C.NAVY + ';margin-bottom:1pt;'));
     out.push(p(esc(d.student.name) + '  ·  Projected graduation: Spring ' + esc(d.classOf) + '  ·  Woodward Academy requirements, State of Georgia requirements, HOPE &amp; Zell Miller, NCAA  ·  current as of ' + esc(ref.updated || ''), 'font-size:6.8pt;color:' + C.MUTED + ';margin-bottom:2pt;'));
     out.push(rule(C.RED, 2)); out.push(gap(3));
-    const col = n => ref.sections.filter(s => s.col === n).map(s =>
-      p(esc(s.title.toUpperCase()), 'font-size:7.5pt;font-weight:bold;color:' + C.RED + ';margin-top:6pt;margin-bottom:1pt;') +
+    const col = n => ref.sections.filter(s => s.col === n).map((s, i) =>
+      p(esc(s.title.toUpperCase()), 'font-size:7.5pt;font-weight:bold;color:' + C.RED + ';margin-top:' + (i ? 10 : 0) + 'pt;margin-bottom:2pt;') +
       (s.rows || []).map(r => p('<b style="color:' + C.NAVY + ';">' + esc(r[0]) + ':</b>  ' + esc(r[1]), 'font-size:6.8pt;margin-bottom:1pt;')).join('') +
       ((s.items || []).length ? '<ul style="margin-top:1pt;margin-bottom:0;">' + s.items.map(i => '<li style="' + F + 'font-size:6.8pt;margin-bottom:1pt;">' + esc(i) + '</li>').join('') + '</ul>' : '')).join('');
     out.push(table([[cell(col(0), { w: 270, b: 0, pad: '0 8pt 0 0' }), cell(col(1), { w: 270, b: 0, pad: '0 0 0 8pt' })]]));
