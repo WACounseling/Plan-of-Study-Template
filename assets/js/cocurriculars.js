@@ -71,6 +71,7 @@
     { v: 'interest', label: 'Interested in exploring' }
   ];
   const WA = root.WA = root.WA || {};
+  (WA.versions = WA.versions || {})['cocurriculars.js'] = '1';
   WA.cocurr = { list: LIST, STATUS };
   if (typeof module !== 'undefined') module.exports = WA.cocurr;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
