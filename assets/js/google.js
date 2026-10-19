@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const WA = window.WA = window.WA || {};
-  (WA.versions = WA.versions || {})['google.js'] = '7';
+  (WA.versions = WA.versions || {})['google.js'] = '8';
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
   const SCOPE = 'openid email profile ' + DRIVE_FILE;
@@ -102,7 +102,7 @@
     const result = { id, url, warnings };
 
     // 2) 0.5" margins, page-break and logo
-    try { await finishDoc(id, tok, opts && opts.logoUrl, warnings); }
+    try { await finishDoc(id, tok, opts && opts.logoUrl, warnings, payload.chipDefs); }
     catch (e) { warnings.push('The document was created, but margins/page break could not be applied automatically (' + e.message + '). Set Page setup to 0.5" margins and add a page break before the reference section.'); }
 
     // 3) share with the student, view only
@@ -129,13 +129,14 @@
     });
   }
   function scan(doc) {
-    const out = { tables: [], paras: [], tokens: {} };
+    const out = { tables: [], paras: [], tokens: {}, dd: [] };
     walk(doc.body && doc.body.content, n => {
       if (n.type === 't') { out.tables.push(n); return; }
       out.paras.push(n);
       (n.el.paragraph.elements || []).forEach(pe => {
         const c = pe.textRun && pe.textRun.content; if (!c) return;
         ['[[LOGO]]', '[[PB]]'].forEach(tk => { const i = c.indexOf(tk); if (i >= 0 && out.tokens[tk] == null) out.tokens[tk] = pe.startIndex + i; });
+        const re = /\[\[DD:([a-z0-9]+)\]\]/g; let m; while ((m = re.exec(c))) out.dd.push({ key: m[1], idx: pe.startIndex + m.index, len: m[0].length });
       });
     });
     return out;
@@ -188,29 +189,66 @@
     });
     return r;
   }
-  async function finishDoc(id, tok, logoUrl, warnings) {
+  /* ---- dropdown chips for course cells (Google Docs API: 2-50 options per dropdown) ---- */
+  const hexRgb = h => ({ red: parseInt(h.slice(1, 3), 16) / 255, green: parseInt(h.slice(3, 5), 16) / 255, blue: parseInt(h.slice(5, 7), 16) / 255 });
+  const OPT_COLORS = { none: ['#f1f4f4', '#6b6b6b'], appr: ['#fdf0d8', '#8a5a00'], norm: ['#e6eef4', '#002e53'] };
+  const optStyle = k => ({ backgroundColor: { color: { rgbColor: hexRgb(OPT_COLORS[k][0]) } }, foregroundColor: { color: { rgbColor: hexRgb(OPT_COLORS[k][1]) } } });
+  const plainLabel = l => (!l || /^— none —$/.test(l)) ? '—' : String(l).replace(/\s*⚑$/, '');
+  function chipPlan(defs, dd) {
+    const creates = [], edits = [], labels = {}, made = {}; let n = 0;
+    dd.forEach(t => {
+      const d = defs && defs[t.key];
+      if (!labels[t.key]) labels[t.key] = d ? plainLabel((d.options.find(o => o.value === d.selected) || d.options[0] || {}).label) : '—';
+      if (!d || !Array.isArray(d.options) || d.options.length < 2) return;
+      if (!made[t.key]) {
+        let selectedId = null;
+        const options = d.options.slice(0, 50).map(o => {
+          const id = 'dropdownItem.o' + (n++).toString(36); if (o.value === d.selected) selectedId = id;
+          return { optionId: id, displayValue: String(o.label || '—').slice(0, 200), textStyle: optStyle(o.value === '' ? 'none' : o.appr ? 'appr' : 'norm') };
+        });
+        made[t.key] = { defId: 'kix.' + t.key, selectedId: selectedId || options[0].optionId };
+        creates.push({ createDropdownDefinition: { dropdownDefinition: { dropdownDefinitionId: made[t.key].defId, dropdownDefinitionProperties: { title: String(d.title || 'Course').slice(0, 200), options } } } });
+      }
+      edits.push({ idx: t.idx, reqs: [{ deleteContentRange: { range: { startIndex: t.idx, endIndex: t.idx + t.len } } }, { insertDropdown: { location: { index: t.idx }, dropdownDefinitionId: made[t.key].defId, selectedOptionId: made[t.key].selectedId } }] });
+    });
+    const keys = Object.keys(labels);
+    return { creates, edits, textFallback: keys.map(k => ({ replaceAllText: { containsText: { text: '[[DD:' + k + ']]', matchCase: true }, replaceText: labels[k] } })), count: edits.length };
+  }
+  async function finishDoc(id, tok, logoUrl, warnings, chipDefs) {
     const doc = await api('https://docs.googleapis.com/v1/documents/' + id, {}, tok);
     const sc = scan(doc); const pb = sc.tokens['[[PB]]'], logo = sc.tokens['[[LOGO]]'];
     const margins = { updateDocumentStyle: { documentStyle: { marginTop: PT(36), marginBottom: PT(36), marginLeft: PT(36), marginRight: PT(36), pageSize: { width: PT(612), height: PT(792) } }, fields: 'marginTop,marginBottom,marginLeft,marginRight,pageSize' } };
-    // style requests do not move any indices, so they go first; token edits go last, later-in-document first
-    const tokenOps = (withImage) => {
-      const r = [];
-      if (pb != null) r.push({ deleteContentRange: { range: { startIndex: pb, endIndex: pb + 6 } } }, { insertPageBreak: { location: { index: pb } } });
+    let layout = []; try { layout = layoutRequests(sc); } catch (e) { warnings.push('Layout clean-up was skipped (' + e.message + ').'); }
+    const cp = chipPlan(chipDefs, sc.dd);
+    // style requests move no indices, so they go first; edits that change text go last, later-in-document first
+    const build = o => {
+      const edits = [], tail = [];
+      if (pb != null) edits.push({ idx: pb, reqs: [{ deleteContentRange: { range: { startIndex: pb, endIndex: pb + 6 } } }, { insertPageBreak: { location: { index: pb } } }] });
       if (logo != null) {
-        if (withImage && logoUrl) r.push({ deleteContentRange: { range: { startIndex: logo, endIndex: logo + 8 } } }, { insertInlineImage: { uri: logoUrl, location: { index: logo }, objectSize: { width: PT(150), height: PT(43) } } });
-        else r.push({ replaceAllText: { containsText: { text: '[[LOGO]]', matchCase: true }, replaceText: 'WOODWARD ACADEMY' } });
+        if (o.img && logoUrl) edits.push({ idx: logo, reqs: [{ deleteContentRange: { range: { startIndex: logo, endIndex: logo + 8 } } }, { insertInlineImage: { uri: logoUrl, location: { index: logo }, objectSize: { width: PT(150), height: PT(43) } } }] });
+        else tail.push({ replaceAllText: { containsText: { text: '[[LOGO]]', matchCase: true }, replaceText: 'WOODWARD ACADEMY' } });
       }
-      return r;
+      if (o.chips) edits.push.apply(edits, cp.edits); else tail.push.apply(tail, cp.textFallback);
+      edits.sort((a, b) => b.idx - a.idx);
+      const r = [margins];
+      if (o.layout) r.push.apply(r, layout);
+      if (o.chips) r.push.apply(r, cp.creates);
+      edits.forEach(e => r.push.apply(r, e.reqs));
+      return r.concat(tail);
     };
     const send = r => api('https://docs.googleapis.com/v1/documents/' + id + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: r }) }, tok);
-    let layout = []; try { layout = layoutRequests(sc); } catch (e) { warnings.push('Layout clean-up was skipped (' + e.message + ').'); }
+    const W = { logo: 'The logo image could not be inserted, so a text wordmark was used.', chips: 'Course dropdowns could not be added, so courses appear as plain text.', layout: 'Table layout clean-up could not be applied; margins, page break and logo were set.' };
     const attempts = [
-      () => send([margins].concat(layout, tokenOps(true))),
-      () => { warnings.push('The logo image could not be inserted, so a text wordmark was used.'); return send([margins].concat(layout, tokenOps(false))); },
-      () => { warnings.push('Table layout clean-up could not be applied; margins, page break and logo were set.'); return send([margins].concat(tokenOps(false))); }
-    ];
+      { o: { img: true, chips: true, layout: true }, w: [] },
+      { o: { img: false, chips: true, layout: true }, w: ['logo'] },
+      { o: { img: true, chips: false, layout: true }, w: ['chips'] },
+      { o: { img: false, chips: false, layout: true }, w: ['logo', 'chips'] },
+      { o: { img: false, chips: false, layout: false }, w: ['logo', 'chips', 'layout'] }
+    ].filter(a => cp.count || !a.o.chips);
     let lastErr;
-    for (const a of attempts) { try { await a(); return; } catch (e) { lastErr = e; } }
+    for (const a of attempts) {
+      try { await send(build(a.o)); a.w.forEach(k => { if (k !== 'chips' || cp.count) warnings.push(W[k]); }); return; } catch (e) { lastErr = e; }
+    }
     throw lastErr;
   }
 
