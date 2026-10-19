@@ -31,10 +31,10 @@
   C('eng2', 'English 2', 'eng', 'CP/EP/HP', 'Y', [10], { pre: 'eng1', req: 'eng', n: 1 });
   C('eng3', 'English 3', 'eng', 'CP/EP/HP', 'Y', [11], { pre: 'eng2', req: 'eng', n: 1 });
   C('aplang11', 'AP English Language & Composition', 'eng', 'AP', 'Y', [11], { fam: 'aplang', pre: 'eng2', soft: 'eng2:HP', ap: 'Dept Chair permission or superior completion of English 2 HP', req: 'eng', n: 1, r: true });
-  C('eng4', 'English 4 — Literary Types', 'eng', 'CP/EP', 'Y', [12], { fam: 'eng4', pre: 'eng3', req: 'eng', n: 1 });
-  C('eng4hp', 'English 4 — Contemporary Drama', 'eng', 'HP', 'Y', [12], { fam: 'eng4', pre: 'eng3', soft: O('eng3:HP', 'aplang'), ap: 'Eng 3 HP or AP Lang, or Chair permission + 3EP teacher recommendation', req: 'eng', n: 1 });
+  C('eng4', 'English 4 — Literary Types', 'eng', 'CP/EP', 'Y', [12], { fam: 'eng4', pre: O('eng3', 'aplang'), req: 'eng', n: 1 });
+  C('eng4hp', 'English 4 — Contemporary Drama', 'eng', 'HP', 'Y', [12], { fam: 'eng4', pre: O('eng3', 'aplang'), soft: O('eng3:HP', 'aplang'), ap: 'Eng 3 HP or AP Lang, or Chair permission + 3EP teacher recommendation', req: 'eng', n: 1 });
   C('aplang12', 'AP English Language & Composition', 'eng', 'AP', 'Y', [12], { fam: 'aplang', pre: 'eng3', soft: 'eng3:HP', ap: 'English 3 HP or Dept Chair permission', req: 'eng', n: 1, r: true });
-  C('aplit', 'AP English Literature & Composition', 'eng', 'AP', 'Y', [12], { pre: 'eng3', soft: 'aplang', ap: 'AP Lang (11th) or Dept Chair permission', req: 'eng', n: 1, r: true });
+  C('aplit', 'AP English Literature & Composition', 'eng', 'AP', 'Y', [12], { pre: O('eng3', 'aplang'), soft: 'aplang', ap: 'AP Lang (11th) or Dept Chair permission', req: 'eng', n: 1, r: true });
   C('contlit', 'Contemporary Literature', 'eng', 'EP', 'Y', [9], { ga: [10, 11], ap: 'Placement by Reading Specialist, Chair & teacher', n: 1 });
   C('mcl', 'Multicultural Literature', 'eng', 'EP', 'E', [9], { ga: [10, 11], ap: 'Placement by Reading Specialist, Chair & teacher', n: 0.5 });
   C('ww', 'Writers Workshop', 'eng', 'CP/EP', 'Y', [11], { ap: 'Required for juniors who have not shown satisfactory writing; taken in addition to English 3', n: 0 });
@@ -260,7 +260,7 @@
   const LEVEL_RANK = { '': 0, CP: 1, EP: 2, HP: 3, AP: 4 };
 
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['catalog.js'] = '1';
+  (WA.versions = WA.versions || {})['catalog.js'] = '2';
   WA.catalog = { list: D, by: BY, DEPTS, LANGS, CORE, LEVEL_RANK };
   if (typeof module !== 'undefined') module.exports = WA.catalog;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
