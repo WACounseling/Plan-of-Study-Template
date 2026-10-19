@@ -81,6 +81,7 @@
     ]
   };
   const WA = root.WA = root.WA || {};
+  (WA.versions = WA.versions || {})['reference.js'] = '2';
   WA.reference = R;
   if (typeof module !== 'undefined') module.exports = R;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
