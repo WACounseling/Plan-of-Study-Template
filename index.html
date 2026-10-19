@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css?v=e">
+<link rel="stylesheet" href="assets/css/styles.css?v=f">
 </head>
 <body>
 <a class="skip" href="#main">Skip to planner</a>
@@ -69,6 +69,12 @@
       </div>
       <div id="signinIn" hidden><span class="ok-dot"></span> Signed in as <b id="siName"></b> (<span id="siEmail"></span>) <button type="button" class="btn link" id="signOutBtn">Sign out</button></div>
       <div id="signinErr" class="signin-err" role="alert" hidden></div>
+    </div>
+    <div class="import-box">
+      <b>Have a plan file from the Student &amp; Family Planner?</b>
+      <label class="btn ghost filebtn">Import a student’s plan file…<input type="file" id="importFamily" accept=".json,application/json" hidden></label>
+      <small>Fills in the courses, prior credit and cocurriculars from the file. Family files are anonymous — you then add the student’s name and email below.</small>
+      <div id="importMsg" role="status" aria-live="polite"></div>
     </div>
   </section>
 
@@ -195,13 +201,14 @@
 <dialog id="dlg"><form method="dialog"><div id="dlgBody"></div><div class="dlg-actions" id="dlgActions"></div></form></dialog>
 
 <script src="assets/js/config.js?v=e"></script>
-<script src="assets/js/catalog.js?v=e"></script>
+<script src="assets/js/catalog.js?v=f"></script>
 <script src="assets/js/cocurriculars.js?v=e"></script>
 <script src="assets/js/engine.js?v=e"></script>
 <script src="assets/js/reference.js?v=e"></script>
+<script src="assets/js/planio.js?v=f"></script>
 <script src="assets/js/docbuilder.js?v=e"></script>
 <script src="assets/js/google.js?v=e"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="assets/js/app.js?v=e"></script>
+<script src="assets/js/app.js?v=f"></script>
 </body>
 </html>
