@@ -6,6 +6,7 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
+  const BUILD = '2026.10.19-d';
 
   function h(tag, attrs) {
     const el = document.createElement(tag);
@@ -334,6 +335,11 @@
   }
   const noteFor = n => { const a = COC.list.find(x => x.name === n); return a ? a.note : ''; };
 
+  function renderDisclaimer() {
+    const d = REF.disclaimer || (WA.docbuilder && WA.docbuilder.DEFAULT_DISCLAIMER), host = $('#disclaimer'); if (!d || !host) return;
+    host.innerHTML = ''; host.appendChild(h('h4', { text: d.title.toUpperCase() })); host.appendChild(h('p', { text: d.text }));
+  }
+
   /* ---------------- reference panel ---------------- */
   function renderRef() {
     const host = $('#refBody'); host.innerHTML = '';
@@ -480,6 +486,8 @@
       if (!$('#ovReason').value.trim()) { msg.innerHTML = '<div class="bad">Please enter a reason for the override.</div>'; $('#ovReason').focus(); return; }
       state.override.on = true; state.override.reason = $('#ovReason').value.trim();
     }
+    try { await WA.google.ensureToken(); }
+    catch (e) { msg.innerHTML = '<div class="bad"><b>Please sign in with Google again.</b> ' + esc(e.message || String(e)) + '</div>'; $('#s-info').scrollIntoView({ behavior: 'smooth' }); renderAuth(); return; }
     const i = state.info, me = WA.google.user;
     const ok = await dialog('<h3>Create this course plan?</h3><ul><li>A Google Doc for <b>' + esc(i.studentName) + '</b> (projected graduation Spring ' + esc(i.classOf) + ') will be created in <b>your Google Drive</b> (' + esc(me.email) + ').</li><li>You will be the <b>owner</b> and can edit it.</li><li>It will be shared <b>view-only</b> with ' + esc(i.studentEmail) + ', who will get a Google notification email.</li>' + (state.override.on ? '<li><b>Counselor override</b> will be recorded in the document.</li>' : '') + '</ul>', [{ text: 'Cancel', value: false }, { text: 'Create Google Doc', value: true, primary: true }]);
     if (!ok) return;
@@ -491,7 +499,8 @@
       msg.innerHTML = '<div class="ok"><b>✓ Course plan created in your Google Drive.</b><br>You own it and can edit it' + (data.shared ? '; ' + esc(i.studentEmail) + ' has view-only access.' : '.') +
         '<br><a href="' + esc(data.url) + '" target="_blank" rel="noopener">Open the Google Doc →</a>' + (data.warnings && data.warnings.length ? '<br><small><b>Please note:</b> ' + esc(data.warnings.join(' ')) + '</small>' : '') + '</div>';
     } catch (err) {
-      msg.innerHTML = '<div class="bad"><b>Could not create the Google Doc.</b> ' + esc(err.message || String(err)) + ' Make sure the Google Docs and Drive APIs are enabled for this site’s Google Cloud project, then try again. Use “Save draft to my Google Drive” to keep your work.</div>';
+      if (err && err.auth) { msg.innerHTML = '<div class="bad"><b>Your Google sign-in expired.</b> ' + esc(err.message) + '</div>'; renderAuth(); $('#s-info').scrollIntoView({ behavior: 'smooth' }); }
+      else msg.innerHTML = '<div class="bad"><b>Could not create the Google Doc.</b> ' + esc(err.message || String(err)) + (err && (err.status === 403 || err.status === 404) ? ' Make sure the Google Docs and Drive APIs are enabled for this site’s Google Cloud project.' : '') + ' Try again, or use “Save draft to my Google Drive” to keep your work.</div>';
     } finally { btn.disabled = false; btn.textContent = 'Submit Course Plan'; }
   }
   function markBad() {
@@ -582,7 +591,8 @@
     update(false);
   }
   function init() {
-    load(); initBindings(); buildGrades(); renderRef();
+    load(); initBindings(); buildGrades(); renderRef(); renderDisclaimer();
+    const fp = document.querySelector('.foot p'); if (fp) fp.appendChild(h('span', { class: 'build', text: ' Build ' + BUILD + '.' }));
     $('#addTransfer').addEventListener('click', () => { state.prior.transfers.push({ title: '', equiv: '', area: 'elec', cr: 1, when: '9', lang: 'fr' }); renderTransfers(); update(true); });
     $('#addCoc').addEventListener('click', () => { state.cocurr.push({ name: '', status: 'active' }); renderCoc(); });
     $('#submitBtn').addEventListener('click', submit);
