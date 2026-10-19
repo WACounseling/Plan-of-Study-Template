@@ -6,9 +6,9 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-e';
+  const BUILD = '2026.10.19-f';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '1', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'docbuilder.js': '5', 'google.js': '7' };
+  const EXPECT = { 'catalog.js': '2', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'planio.js': '1', 'docbuilder.js': '5', 'google.js': '7' };
   const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft'];
   function syncProblems() {
     const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
@@ -573,6 +573,31 @@
     if (!ok) return; state = E.emptyState(); try { sessionStorage.removeItem(SKEY); } catch (e) { /* */ } fullRender();
   }
 
+
+  /* ---------------- import a plan file from the Student & Family Planner ---------------- */
+  const hasPlanWork = () => !!(state.info.studentName.trim() || state.cocurr.some(c => c.name) || state.prior.transfers.length || E.GRADES.some(g => E.ALL_SLOTS.some(s => state.plan[g][s.k].f || state.plan[g][s.k].s)));
+  function importFamilyFile(file) {
+    const out = $('#importMsg'); out.innerHTML = '';
+    const bad = m => { out.innerHTML = '<div class="bad">' + esc(m) + '</div>'; };
+    const r = new FileReader();
+    r.onload = async () => {
+      let res; try { res = WA.planio.parse(String(r.result)); } catch (e) { bad(e.message); return; }
+      let sp = null;
+      if (res.kind === 'one') sp = res.plan;
+      else {
+        const pick = await dialog('<h3>Which plan would you like to import?</h3><p class="muted">This file has up to three plans from the family.</p>', res.plans.map((p, i) => ({ text: p.name, value: i, primary: i === res.cur })).concat([{ text: 'Cancel', value: false }]));
+        if (pick === false || pick === undefined) return; sp = res.plans[pick];
+      }
+      if (hasPlanWork() && !(await dialog('<h3>Replace the current plan?</h3><p>Importing “' + esc(sp.name) + '” replaces the courses, prior credit and cocurriculars on this page. Student and counselor information stays.</p>', [{ text: 'Cancel', value: false }, { text: 'Import', value: true, primary: true }]))) return;
+      state.plan = sp.plan; state.summer = sp.summer; state.prior = Object.assign(E.emptyState().prior, sp.prior); state.cocurr = sp.cocurr;
+      if (sp.classOf) state.info.classOf = sp.classOf;
+      if (sp.notes) state.info.notes = (state.info.notes ? state.info.notes.trim() + '\n\n' : '') + 'From the family planner (' + sp.name + '): ' + sp.notes;
+      fullRender();
+      out.innerHTML = '<div class="ok"><b>✓ Imported “' + esc(sp.name) + '”' + (sp.classOf ? ' (Class of ' + esc(sp.classOf) + ')' : '') + '.</b> Please enter the student’s name and email in Step 1, then review the plan before submitting.</div>';
+    };
+    r.readAsText(file);
+  }
+
   /* ---------------- Google sign-in UI ---------------- */
   function renderAuth() {
     const u = WA.google && WA.google.user;
@@ -615,6 +640,7 @@
     $('#saveDraft').addEventListener('click', saveDraft);
     $('#loadDraft').addEventListener('click', openDrafts);
     $('#resetAll').addEventListener('click', reset);
+    $('#importFamily').addEventListener('change', e => { if (e.target.files[0]) importFamilyFile(e.target.files[0]); e.target.value = ''; });
     $('#ovOn').addEventListener('change', e => { state.override.on = e.target.checked; save(); });
     $('#ovReason').addEventListener('input', e => { state.override.reason = e.target.value; save(); });
     ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => $('[data-bind="' + p + '"]').addEventListener('input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
