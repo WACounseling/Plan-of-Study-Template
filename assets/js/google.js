@@ -102,9 +102,11 @@
 
   /* ---- walk the real document structure (including tables) so every index comes from Google, not guesses ---- */
   function walk(content, visit, inTable) {
+    let first = true;
     (content || []).forEach(el => {
-      if (el.paragraph) visit({ type: 'p', el, inTable: !!inTable });
+      if (el.paragraph) { visit({ type: 'p', el, inTable: !!inTable, firstInCell: !!inTable && first }); first = false; }
       else if (el.table) {
+        first = false;
         const tb = el.table, info = { type: 't', el, rows: tb.rows, cols: tb.columns, start: el.startIndex };
         visit(info);
         (tb.tableRows || []).forEach(r => (r.tableCells || []).forEach(c => walk(c.content, visit, true)));
@@ -126,7 +128,7 @@
   const PT = n => ({ magnitude: n, unit: 'PT' });
   // expected tables in document order: [columns, column widths in points]
   const TABLE_SPECS = [
-    [2, [230, 310]],                       // header: logo | title
+    [2, [230, 310], 'MIDDLE'],             // header: logo | title (centered vertically)
     [1, [540]],                            // red rule
     [4, [78, 150, 112, 200]],              // student / counselor info
     [5, [66, 118.5, 118.5, 118.5, 118.5]], // four-year grid
@@ -137,19 +139,20 @@
   ];
   function layoutRequests(sc) {
     const r = [], used = [];
-    let si = 0;
+    let si = 0, refRange = null;
     sc.tables.forEach(t => {
       // match the next unused spec with the same column count
       let k = si; while (k < TABLE_SPECS.length && TABLE_SPECS[k][0] !== t.cols) k++;
       if (k >= TABLE_SPECS.length) return; si = k + 1;
-      const widths = TABLE_SPECS[k][1], isRule = t.cols === 1;
+      const widths = TABLE_SPECS[k][1], isRule = t.cols === 1, align = TABLE_SPECS[k][2] || 'TOP';
       const loc = { index: t.start };
       widths.forEach((w, ci) => r.push({ updateTableColumnProperties: { tableStartLocation: loc, columnIndices: [ci], tableColumnProperties: { widthType: 'FIXED_WIDTH', width: PT(w) }, fields: 'widthType,width' } }));
       r.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: loc, rowIndex: 0, columnIndex: 0 }, rowSpan: t.rows, columnSpan: t.cols },
-        tableCellStyle: isRule ? { paddingTop: PT(0), paddingBottom: PT(0), paddingLeft: PT(0), paddingRight: PT(0) } : { paddingTop: PT(3), paddingBottom: PT(3), paddingLeft: PT(4), paddingRight: PT(4) },
-        fields: 'paddingTop,paddingBottom,paddingLeft,paddingRight' } });
+        tableCellStyle: isRule ? { paddingTop: PT(0), paddingBottom: PT(0), paddingLeft: PT(0), paddingRight: PT(0), contentAlignment: 'TOP' } : { paddingTop: PT(3), paddingBottom: PT(3), paddingLeft: PT(4), paddingRight: PT(4), contentAlignment: align },
+        fields: 'paddingTop,paddingBottom,paddingLeft,paddingRight,contentAlignment' } });
       if (isRule) r.push({ updateTableRowStyle: { tableStartLocation: loc, rowIndices: [0], tableRowStyle: { minRowHeight: PT(3) }, fields: 'minRowHeight' } });
       used.push({ t, rule: isRule });
+      if (k === TABLE_SPECS.length - 1) refRange = { start: t.el.startIndex, end: t.el.endIndex };
     });
     // tight, uniform paragraph spacing (Docs' default 1.15 spacing otherwise pushes page 1 onto a second page)
     const last = sc.paras.length ? sc.paras[sc.paras.length - 1].el.endIndex : 2;
@@ -162,6 +165,11 @@
       if (ruleCell) r.push({ updateTextStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, textStyle: { fontSize: PT(1) }, fields: 'fontSize' } });
       else if (!text && !n.inTable) r.push({ updateTextStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, textStyle: { fontSize: PT(3) }, fields: 'fontSize' } });
       else if (n.inTable && text && !ruleCell) r.push({ updateParagraphStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, paragraphStyle: { spaceBelow: PT(1) }, fields: 'spaceBelow' } });
+      // page 2: a clear gap above every section title (all-caps heading) except the first in each column
+      const raw = pe.map(e => (e.textRun && e.textRun.content) || '').join('').replace(/\n$/, '').trim();
+      const isTitle = raw.length > 3 && /[A-Z]/.test(raw) && raw === raw.toUpperCase();
+      if (refRange && isTitle && !n.firstInCell && n.el.startIndex >= refRange.start && n.el.endIndex <= refRange.end)
+        r.push({ updateParagraphStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, paragraphStyle: { spaceAbove: PT(10), spaceBelow: PT(2) }, fields: 'spaceAbove,spaceBelow' } });
     });
     return r;
   }
