@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const WA = window.WA = window.WA || {};
-  (WA.versions = WA.versions || {})['google.js'] = '8';
+  (WA.versions = WA.versions || {})['google.js'] = '9';
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
   const SCOPE = 'openid email profile ' + DRIVE_FILE;
@@ -147,7 +147,7 @@
     [2, [230, 310], 'MIDDLE'],             // header: logo | title (centered vertically)
     [1, [540]],                            // red rule
     [4, [78, 150, 112, 200]],              // student / counselor info
-    [5, [66, 118.5, 118.5, 118.5, 118.5]], // four-year grid
+    [5, [54, 121.5, 121.5, 121.5, 121.5]], // four-year grid
     [5, [108, 108, 108, 108, 108]],        // requirement tracker
     [2, [270, 270]],                       // cocurriculars
     [1, [540]],                            // red rule (page 2)
@@ -198,13 +198,13 @@
     const creates = [], edits = [], labels = {}, made = {}; let n = 0;
     dd.forEach(t => {
       const d = defs && defs[t.key];
-      if (!labels[t.key]) labels[t.key] = d ? plainLabel((d.options.find(o => o.value === d.selected) || d.options[0] || {}).label) : '—';
+      if (!labels[t.key]) labels[t.key] = d ? plainLabel((function (o) { return o.full || o.label; })(d.options.find(o => o.value === d.selected) || d.options[0] || {})) : '—';
       if (!d || !Array.isArray(d.options) || d.options.length < 2) return;
       if (!made[t.key]) {
         let selectedId = null;
         const options = d.options.slice(0, 50).map(o => {
           const id = 'dropdownItem.o' + (n++).toString(36); if (o.value === d.selected) selectedId = id;
-          return { optionId: id, displayValue: String(o.label || '—').slice(0, 200), textStyle: optStyle(o.value === '' ? 'none' : o.appr ? 'appr' : 'norm') };
+          return { optionId: id, displayValue: String(o.label || o.full || '—').slice(0, 200), textStyle: optStyle(o.value === '' ? 'none' : o.appr ? 'appr' : 'norm') };
         });
         made[t.key] = { defId: 'kix.' + t.key, selectedId: selectedId || options[0].optionId };
         creates.push({ createDropdownDefinition: { dropdownDefinition: { dropdownDefinitionId: made[t.key].defId, dropdownDefinitionProperties: { title: String(d.title || 'Course').slice(0, 200), options } } } });
