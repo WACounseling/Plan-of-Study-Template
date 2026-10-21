@@ -6,9 +6,9 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-h';
+  const BUILD = '2026.10.19-i';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '2', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'planio.js': '1', 'combo.js': '1', 'docbuilder.js': '7', 'google.js': '9' };
+  const EXPECT = { 'catalog.js': '3', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'planio.js': '1', 'combo.js': '1', 'docbuilder.js': '7', 'google.js': '9' };
   const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft'];
   function syncProblems() {
     const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
