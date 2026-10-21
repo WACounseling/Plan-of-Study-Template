@@ -238,7 +238,7 @@
   C('capyb', 'Capstone Student Publications: Yearbook', 'jr', 'HP', 'Y', [12], { pre: O('photoj', 'yb'), cap: 'Y', ap: 'Application; Administration approval' });
 
   /* ---------------- LEARNING SUPPORT ---------------- */
-  C('ff', 'Freshman Foundations', 'ls', 'CP', 'E', [9], { supp: true });
+  C('ff', 'Freshman Foundations', 'ls', 'CP', 'E', [9], { supp: true, rep: 1 });
   C('ss_', 'Study Strategies', 'ls', 'CP', 'E', ALL, { supp: true, rep: 1, ap: 'Diagnosed learning differences or Chair permission' });
   C('esol', 'English Speakers of Other Languages (ESOL)', 'ls', 'CP', 'E', [9, 10], { supp: true, rep: 1, ap: 'Director of Global Connections' });
   C('sh', 'Study Hall (no credit)', 'ls', '', 'E', ALL, { nocr: true, rep: 1, hall: true });
@@ -260,7 +260,7 @@
   const LEVEL_RANK = { '': 0, CP: 1, EP: 2, HP: 3, AP: 4 };
 
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['catalog.js'] = '2';
+  (WA.versions = WA.versions || {})['catalog.js'] = '3';
   WA.catalog = { list: D, by: BY, DEPTS, LANGS, CORE, LEVEL_RANK };
   if (typeof module !== 'undefined') module.exports = WA.catalog;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
