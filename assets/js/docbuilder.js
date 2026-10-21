@@ -36,7 +36,7 @@
     text: 'This plan is a projection only and does not guarantee placement in any course or course availability. It may change based on student interests, academic performance, prerequisites and approvals, course availability and enrollment, scheduling, and course changes or sequence restructuring. The current Scheduling & Curriculum Guide governs. Please review this plan with your counselor each year.'
   };
 
-  const chipLine = c => p((c.sem ? '<span style="color:' + C.SLATE + ';font-weight:bold;">' + esc(c.sem) + ':</span> ' : '') + '[[DD:' + esc(c.key) + ']]', 'font-size:7.5pt;margin-bottom:1pt;');
+  const chipLine = c => p((c.sem ? '<span style="color:' + C.SLATE + ';font-weight:bold;">' + esc(c.sem) + ':</span> ' : '') + '[[DD:' + esc(c.key) + ']]', 'font-size:7pt;margin-bottom:1pt;');
 
   function buildHtml(d) {
     const out = [];
@@ -61,7 +61,7 @@
     out.push(gap(5));
 
     /* four-year grid */
-    const labW = 66, colW = (540 - labW) / 4;
+    const labW = 54, colW = (540 - labW) / 4;
     const head = [cell('&nbsp;', { w: labW, b: 0 })].concat(d.grades.map(g => cell(p(esc(g.label.toUpperCase()), 'font-size:8pt;font-weight:bold;color:#fff;text-align:center;') + (g.year ? p(esc(g.year), 'font-size:6.5pt;color:#fff;text-align:center;') : ''), { w: colW, bg: C.NAVY, pad: '4pt', bc: C.NAVY })));
     const rows = [head];
     d.grades[0].rows.forEach((r, i) => {
@@ -71,7 +71,7 @@
     rows.push([cell(p('Summer', 'font-size:7pt;font-weight:bold;color:' + C.NAVY + ';'), { w: labW, bg: C.MIST })]
       .concat(d.grades.map(g => cell(g.summerChips && g.summerChips.length ? g.summerChips.map(chipLine).join('') : (g.summer && g.summer.length ? g.summer.map(courseLine).join('') : p('—', 'font-size:7.5pt;color:#a0a0a0;')), { w: colW }))));
     out.push(table(rows));
-    if (d.chipDefs && Object.keys(d.chipDefs).length) out.push(p('Counselors: each course in the grid is a dropdown — click one to choose a different course (each list shows common eligible choices, not the full catalog). The tracker below shows the plan as submitted and does not update when a dropdown is changed.', 'font-size:6.3pt;color:' + C.MUTED + ';font-style:italic;margin-top:2pt;'));
+    if (d.chipDefs && Object.keys(d.chipDefs).length) out.push(p('Counselors: each course in the grid is a dropdown — click one to choose a different course. Names are shortened to fit and start with the level (EP, HP, AP, CP); each list shows common eligible choices, not the full catalog. The tracker below shows the plan as submitted and does not update when a dropdown is changed.', 'font-size:6.3pt;color:' + C.MUTED + ';font-style:italic;margin-top:2pt;'));
     out.push(gap(6));
 
     /* tracker */
@@ -133,7 +133,7 @@
   }
 
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['docbuilder.js'] = '6';
+  (WA.versions = WA.versions || {})['docbuilder.js'] = '7';
   WA.docbuilder = { buildHtml, DEFAULT_DISCLAIMER };
   if (typeof module !== 'undefined') module.exports = WA.docbuilder;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
