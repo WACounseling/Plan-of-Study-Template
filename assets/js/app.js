@@ -6,9 +6,9 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-i';
+  const BUILD = '2026.10.19-j';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '3', 'cocurriculars.js': '1', 'engine.js': '1', 'reference.js': '2', 'planio.js': '1', 'combo.js': '1', 'docbuilder.js': '7', 'google.js': '9' };
+  const EXPECT = { 'catalog.js': '4', 'cocurriculars.js': '1', 'engine.js': '2', 'reference.js': '3', 'planio.js': '2', 'combo.js': '1', 'docbuilder.js': '7', 'google.js': '9' };
   const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft'];
   function syncProblems() {
     const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
@@ -289,7 +289,7 @@
 
   /* ---------------- transfer credit rows ---------------- */
   const AREAS = [['eng', 'English'], ['math', 'Mathematics'], ['ss', 'Social Studies'], ['sci', 'Science'], ['wl', 'World Language'], ['pe', 'Physical Education'], ['fa', 'Fine Arts'], ['elec', 'Elective']];
-  const WHEN = [['9', 'Grade 9'], ['10', 'Grade 10'], ['11', 'Grade 11'], ['12', 'Grade 12'], ['s9', 'Summer after 9th'], ['s10', 'Summer after 10th'], ['s11', 'Summer after 11th']];
+  const WHEN = [['8', 'Middle School (before 9th)'], ['9', 'Grade 9'], ['10', 'Grade 10'], ['11', 'Grade 11'], ['12', 'Grade 12'], ['s9', 'Summer after 9th'], ['s10', 'Summer after 10th'], ['s11', 'Summer after 11th']];
   let equivHTML = null;
   function equivOptions() {
     if (equivHTML) return equivHTML;
@@ -402,7 +402,7 @@
     const ip = infoProblems();
     setDot('info', ip.length ? 'part' : 'done', ip.length ? 'Needs: ' + ip.join(', ') : 'Complete');
     const pr = state.prior;
-    const hasPrior = +pr.psCredit > 0 || pr.civics8 || pr.gat || pr.placement || pr.msLang || pr.msMath !== 'alg1' || pr.transfers.length > 0;
+    const hasPrior = +pr.psCredit > 0 || pr.civics8 || pr.placement || pr.msLang || pr.msMath !== 'alg1' || pr.transfers.length > 0;
     setDot('prior', hasPrior ? 'done' : 'none', hasPrior ? 'Prior credit / placement entered' : 'Optional — nothing entered');
     let done = 0, bad = 0, sel = 0;
     E.GRADES.forEach(g => {
@@ -539,8 +539,8 @@
     if (+pr.psCredit > 0) ms.push('Physical Science (8th grade): ' + pr.psCredit + ' unit science credit');
     if (pr.civics8) ms.push('Government & Economics HP completed in 8th grade (Gov/Econ waived)');
     const mathTxt = { alg1: 'Algebra 1 (CP/EP)', alg1hp: 'Algebra 1 (HP)', geohp: 'Algebra 1 (HP) + Geometry (HP)' }[pr.msMath]; if (mathTxt) ms.push('Middle School math: ' + mathTxt + ' (no U.S. credit)');
-    if (pr.msLang) { const [c, l] = pr.msLang.split(':'); ms.push('Middle School ' + CAT.LANGS[c] + ': Level ' + (l === '2' ? '1 & 2' : '1') + ' complete'); }
-    if (pr.gat) ms.push('GAT HP completed'); if (pr.placement) ms.push('Language placement / heritage speaker');
+    if (pr.msLang) { const [c, l] = pr.msLang.split(':'); ms.push(CAT.LANGS[c] + ' completed before 9th grade: ' + (+l === 1 ? 'Level 1' : 'Levels 1–' + l) + ' (no Upper School credit)'); }
+    if (pr.placement) ms.push('Language placement / heritage speaker');
     const tr = pr.transfers.filter(x => +x.cr > 0).map(x => {
       const p = E.parseSel(x.equiv); const w = WHEN.find(w => w[0] === String(x.when)); const a = AREAS.find(a => a[0] === x.area);
       return (x.title || (p ? E.courseLabel(p.c, p.lv) : 'Transfer credit')) + ' — ' + x.cr + ' unit' + (+x.cr === 1 ? '' : 's') + ' (' + (p ? 'equiv. ' + E.courseLabel(p.c, p.lv) : (a ? a[1] : '') + (x.area === 'wl' ? ': ' + CAT.LANGS[x.lang] : '')) + '), ' + (w ? w[1] : '');
