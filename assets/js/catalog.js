@@ -49,7 +49,7 @@
   C('geohp', 'Geometry', 'math', 'HP', 'Y', [9, 10], { fam: 'geo', pre: 'alg1', n: 1 });
   C('alg2', 'Algebra 2', 'math', 'CP/EP', 'Y', [9, 10, 11], { pre: 'geo', n: 1, nl: { CP: 0.5 }, r: true });
   C('alg2hp', 'Algebra 2', 'math', 'HP', 'Y', [9, 10, 11], { fam: 'alg2', pre: O('geo', 'prof:msAlg1HP'), n: 1, r: true });
-  C('analysis', 'Analysis', 'math', 'HP', 'Y', [9, 10], { pre: 'prof:gat', ap: 'Completion of GAT HP in 8th grade', n: 1, r: true });
+  C('analysis', 'Analysis', 'math', 'HP', 'Y', [9, 10], { ap: 'Department Chair placement (the GAT HP pathway is no longer offered)', n: 1, r: true });
   C('stat_cp', 'Statistics', 'math', 'CP', 'Y', SR, { fam: 'stat', pre: 'alg2', n: 1, r: true });
   C('cat_cp', 'College Algebra & Trigonometry', 'math', 'CP', 'Y', [12], { pre: 'alg2', n: 0.5, r: true });
   C('pcalg', 'Pre-Calculus with Algebra', 'math', 'EP', 'Y', SR, { pre: 'alg2', soft: 'alg2:EP+', ap: 'Alg 2 CP needs Dept Chair approval', n: 0.68, r: true });
@@ -121,28 +121,28 @@
   }
   lang('fr', 'French', [[1, 'EP/HP'], [2, 'EP/HP'], [3, 'EP/HP'], [4, 'EP/HP']]);
   C('fr4cap', 'Capstone French 4', 'wl', 'HP', 'Y', [12], { fam: 'fr4cap', lang: 'fr', lvn: 4, pre: 'fr3', ap: 'Prereq 3HP with Dept Chair permission', cap: 'Y', n: 1, r: true });
-  C('fr5', 'French 5', 'wl', 'HP', 'Y', SR, { lang: 'fr', lvn: 5, pre: O('fr4', 'fr4cap', 'apfr'), n: 1, r: true });
+  C('fr5', 'French 5', 'wl', 'HP', 'Y', SR, { ga: [9, 10], lang: 'fr', lvn: 5, pre: O('fr4', 'fr4cap', 'apfr'), n: 1, r: true });
   C('fr5cap', 'Capstone French 5', 'wl', 'HP', 'Y', [12], { fam: 'fr5cap', lang: 'fr', lvn: 5, pre: O('fr4', 'fr4cap', 'apfr'), ap: 'Dept Chair permission', cap: 'Y', n: 1, r: true });
-  C('apfr', 'AP French Language & Culture', 'wl', 'AP', 'Y', SR, { lang: 'fr', lvn: 5, pre: 'fr3', soft: O('fr3:HP+', 'fr4:EP+'), ap: '3HP, 4EP/4HP or department approval', n: 1, r: true });
+  C('apfr', 'AP French Language & Culture', 'wl', 'AP', 'Y', SR, { ga: [10], lang: 'fr', lvn: 5, pre: 'fr3', soft: O('fr3:HP+', 'fr4:EP+'), ap: '3HP, 4EP/4HP or department approval', n: 1, r: true });
   C('sp1cp', 'Spanish 1', 'wl', 'CP', 'Y', L1, { fam: 'sp1', lang: 'sp', lvn: 1, ga: [11, 12], ap: 'Seniors/juniors placed only if space permits', n: 1 });
   C('sp1', 'Spanish 1', 'wl', 'EP/HP', 'Y', L1, { lang: 'sp', lvn: 1, ga: [11, 12], ap: 'Seniors/juniors placed only if space permits', n: 1 });
   C('sp2cp', 'Spanish 2', 'wl', 'CP', 'Y', [10, 11, 12], { fam: 'sp2', lang: 'sp', lvn: 2, pre: lvlPre('sp', 2), n: 1, r: true });
   C('sp2', 'Spanish 2', 'wl', 'EP/HP', 'Y', LN, { lang: 'sp', lvn: 2, pre: lvlPre('sp', 2), n: 1, r: true });
   C('sp3cp', 'Spanish 3', 'wl', 'CP', 'Y', [10, 11, 12], { fam: 'sp3', lang: 'sp', lvn: 3, pre: lvlPre('sp', 3), n: 1, r: true });
   C('sp3', 'Spanish 3', 'wl', 'EP/HP', 'Y', ALL, { lang: 'sp', lvn: 3, pre: lvlPre('sp', 3), n: 1, r: true });
-  C('sp4', 'Spanish 4', 'wl', 'EP/HP', 'Y', UP, { lang: 'sp', lvn: 4, pre: lvlPre('sp', 4), n: 1, r: true });
-  C('sp5', 'Spanish 5', 'wl', 'HP', 'Y', SR, { lang: 'sp', lvn: 5, pre: O('sp4', 'apsp'), n: 1, r: true });
+  C('sp4', 'Spanish 4', 'wl', 'EP/HP', 'Y', UP, { ga: [9], lang: 'sp', lvn: 4, pre: lvlPre('sp', 4), n: 1, r: true });
+  C('sp5', 'Spanish 5', 'wl', 'HP', 'Y', SR, { ga: [9, 10], lang: 'sp', lvn: 5, pre: O('sp4', 'apsp'), n: 1, r: true });
   C('sp5cap', 'Capstone Spanish 5', 'wl', 'HP', 'Y', [12], { fam: 'sp5cap', lang: 'sp', lvn: 5, pre: O('sp4', 'apsp'), ap: 'Dept Chair permission', cap: 'Y', n: 1, r: true });
-  C('apsp', 'AP Spanish Language & Culture', 'wl', 'AP', 'Y', SR, { lang: 'sp', lvn: 5, pre: 'sp3', soft: O('sp3:HP+', 'sp4:HP+'), ap: '3HP, 4HP or department approval', n: 1, r: true });
-  C('apspl', 'AP Spanish Literature & Culture', 'wl', 'AP', 'Y', SR, { lang: 'sp', lvn: 6, pre: 'sp4', soft: 'apsp', ap: 'AP Spanish Language or department approval', n: 1, r: true });
+  C('apsp', 'AP Spanish Language & Culture', 'wl', 'AP', 'Y', SR, { ga: [10], lang: 'sp', lvn: 5, pre: 'sp3', soft: O('sp3:HP+', 'sp4:HP+'), ap: '3HP, 4HP or department approval', n: 1, r: true });
+  C('apspl', 'AP Spanish Literature & Culture', 'wl', 'AP', 'Y', SR, { ga: [10], lang: 'sp', lvn: 6, pre: 'sp4', soft: 'apsp', ap: 'AP Spanish Language or department approval', n: 1, r: true });
   lang('de', 'German', [[1, 'EP/HP'], [2, 'EP/HP'], [3, 'EP/HP'], [4, 'EP/HP']]);
-  C('de5', 'German 5', 'wl', 'EP/HP', 'Y', SR, { lang: 'de', lvn: 5, pre: 'de4', n: 0, r: true, ap: 'NCAA approval pending at time of guide publication' });
-  C('apde', 'AP German', 'wl', 'AP', 'Y', SR, { lang: 'de', lvn: 5, pre: 'de3', soft: O('de3:HP+', 'de4:HP+'), ap: '3HP or 4HP and/or department approval', n: 1, r: true });
+  C('de5', 'German 5', 'wl', 'EP/HP', 'Y', SR, { ga: [9, 10], lang: 'de', lvn: 5, pre: 'de4', n: 0, r: true, ap: 'NCAA approval pending at time of guide publication' });
+  C('apde', 'AP German', 'wl', 'AP', 'Y', SR, { ga: [10], lang: 'de', lvn: 5, pre: 'de3', soft: O('de3:HP+', 'de4:HP+'), ap: '3HP or 4HP and/or department approval', n: 1, r: true });
   lang('ja', 'Japanese', [[1, 'EP/HP'], [2, 'EP/HP'], [3, 'EP/HP']]);
-  C('ja4', 'Japanese 4', 'wl', 'HP', 'Y', SR, { lang: 'ja', lvn: 4, pre: 'ja3', n: 1, r: true });
-  C('apja', 'AP Japanese', 'wl', 'AP', 'Y', SR, { lang: 'ja', lvn: 5, pre: 'ja3', ap: 'Dept Chair approval required', n: 1, r: true });
+  C('ja4', 'Japanese 4', 'wl', 'HP', 'Y', SR, { ga: [9, 10], lang: 'ja', lvn: 4, pre: 'ja3', n: 1, r: true });
+  C('apja', 'AP Japanese', 'wl', 'AP', 'Y', SR, { ga: [10], lang: 'ja', lvn: 5, pre: 'ja3', ap: 'Dept Chair approval required', n: 1, r: true });
   lang('zh', 'Mandarin Chinese', [[1, 'EP/HP'], [2, 'EP/HP'], [3, 'EP/HP'], [4, 'EP/HP']]);
-  C('apzh', 'AP Mandarin Chinese', 'wl', 'AP', 'Y', SR, { lang: 'zh', lvn: 5, pre: 'zh3', ap: 'Approval of Chinese teacher & Dept Chair', n: 1, r: true });
+  C('apzh', 'AP Mandarin Chinese', 'wl', 'AP', 'Y', SR, { ga: [10], lang: 'zh', lvn: 5, pre: 'zh3', ap: 'Approval of Chinese teacher & Dept Chair', n: 1, r: true });
 
   /* ---------------- COMPUTER SCIENCE (only AP counts in Core GPA; none NCAA) ---------------- */
   C('idt', 'Introduction to Digital Technology', 'cs', 'EP/HP', 'E', ALL, { n: 0 });
@@ -238,8 +238,8 @@
   C('capyb', 'Capstone Student Publications: Yearbook', 'jr', 'HP', 'Y', [12], { pre: O('photoj', 'yb'), cap: 'Y', ap: 'Application; Administration approval' });
 
   /* ---------------- LEARNING SUPPORT ---------------- */
-  C('ff', 'Freshman Foundations', 'ls', 'CP', 'E', [9], { supp: true, rep: 1 });
-  C('ss_', 'Study Strategies', 'ls', 'CP', 'E', ALL, { supp: true, rep: 1, ap: 'Diagnosed learning differences or Chair permission' });
+  C('ff', 'Freshman Foundations', 'ls', 'CP', 'E', [9], { supp: true, rep: 1, pe: true });
+  C('ss_', 'Study Strategies', 'ls', 'CP', 'E', ALL, { supp: true, rep: 1, pe: true, ap: 'Diagnosed learning differences or Chair permission' });
   C('esol', 'English Speakers of Other Languages (ESOL)', 'ls', 'CP', 'E', [9, 10], { supp: true, rep: 1, ap: 'Director of Global Connections' });
   C('sh', 'Study Hall (no credit)', 'ls', '', 'E', ALL, { nocr: true, rep: 1, hall: true });
   C('rper', 'R Period (no credit)', 'ls', '', 'E', SR, { nocr: true, rep: 1, hall: true, needs: 'peFa', ap: 'Privilege: PE and Fine Arts requirements must be complete' });
@@ -260,7 +260,7 @@
   const LEVEL_RANK = { '': 0, CP: 1, EP: 2, HP: 3, AP: 4 };
 
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['catalog.js'] = '3';
+  (WA.versions = WA.versions || {})['catalog.js'] = '4';
   WA.catalog = { list: D, by: BY, DEPTS, LANGS, CORE, LEVEL_RANK };
   if (typeof module !== 'undefined') module.exports = WA.catalog;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
