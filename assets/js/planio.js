@@ -4,11 +4,11 @@
  * Everything read from a file is re-validated: unknown courses, odd values and oversized text are dropped. */
 (function (root) {
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['planio.js'] = '1';
+  (WA.versions = WA.versions || {})['planio.js'] = '2';
   const CAT = WA.catalog || require('./catalog.js');
   const GR = [9, 10, 11, 12], SLOTS = ['eng', 'math', 'ss', 'sci', 'wl', 'e1', 'e2', 'e3'], SUM = ['su1', 'su2'];
-  const MATH = ['none', 'alg1', 'alg1hp', 'geohp'], LANGV = ['', 'fr:1', 'fr:2', 'sp:1', 'sp:2'];
-  const AREAS = ['eng', 'math', 'ss', 'sci', 'wl', 'pe', 'fa', 'elec'], WHEN = ['9', '10', '11', '12', 's9', 's10', 's11'];
+  const MATH = ['none', 'alg1', 'alg1hp', 'geohp'], LANGV = [''].concat(['fr', 'sp', 'de', 'ja', 'zh'].reduce((a, c) => a.concat([1, 2, 3, 4].map(n => c + ':' + n)), []));
+  const AREAS = ['eng', 'math', 'ss', 'sci', 'wl', 'pe', 'fa', 'elec'], WHEN = ['8', '9', '10', '11', '12', 's9', 's10', 's11'];
   const MAXBYTES = 1000000;
   const str = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f]+/g, ' ').trim().slice(0, n);
   const course = v => { if (typeof v !== 'string' || !v) return null; const [id, lv] = v.split('|'); const c = CAT.by[id]; return c && c.lv.includes(lv || '') ? c : null; };
@@ -32,7 +32,7 @@
     });
     const p = raw.prior && typeof raw.prior === 'object' ? raw.prior : {};
     out.prior = {
-      psCredit: [0, 0.5, 1].includes(+p.psCredit) ? +p.psCredit : 0, civics8: !!p.civics8, msMath: MATH.includes(p.msMath) ? p.msMath : 'alg1', gat: !!p.gat,
+      psCredit: [0, 0.5, 1].includes(+p.psCredit) ? +p.psCredit : 0, civics8: !!p.civics8, msMath: MATH.includes(p.msMath) ? p.msMath : 'alg1',
       msLang: LANGV.includes(p.msLang) ? p.msLang : '', placement: !!p.placement,
       transfers: (Array.isArray(p.transfers) ? p.transfers : []).slice(0, 20).map(t => {
         t = t && typeof t === 'object' ? t : {}; const cr = Math.round(+t.cr * 2) / 2;
