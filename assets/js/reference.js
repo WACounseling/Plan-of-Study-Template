@@ -18,7 +18,7 @@
           ['Electives', '3.5 units — core or non-core'], ['TOTAL', '22 units minimum']],
         items: ['One unit = two semesters. Seven-period rotating schedule; at least 6 graded subjects and 4 core-discipline subjects every semester.',
           'Middle School math, social studies and language do not earn U.S. credit; WA 8th-grade Physical Science earns ½ unit per semester. Students who completed HP Civics in 8th grade skip Gov/Econ but still need 3 SS units.',
-          'PE can be met with Physical Conditioning, Dance Fitness, year-long dance, one full Marching Band season, or one full WA sports season.',
+          'PE can be met with Physical Conditioning, Dance Fitness, year-long dance, Freshman Foundations or Study Strategies, one full Marching Band season, or one full WA sports season.',
           'R period (grades 11–12) requires PE and Fine Arts to be complete.']
       },
       {
@@ -81,7 +81,7 @@
     ]
   };
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['reference.js'] = '2';
+  (WA.versions = WA.versions || {})['reference.js'] = '3';
   WA.reference = R;
   if (typeof module !== 'undefined') module.exports = R;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
