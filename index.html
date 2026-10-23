@@ -100,18 +100,43 @@
           <option value="geohp">Algebra 1 (HP) + Geometry (HP)</option>
         </select>
         <small>Middle School math earns no Upper School credit, but 4 consecutive math units are still required in grades 9–12.</small></label>
-      <label>World Language completed in Middle School
+      <label>World Language completed in Middle School <span class="muted">(including Upper School language classes)</span>
         <select data-bind="prior.msLang">
           <option value="">None / new to the language</option>
-          <option value="fr:1">French — Level 1 complete (7EP + 8EP, 8HP, or 1HP) → start at French 2</option>
-          <option value="fr:2">French — Levels 1 &amp; 2 complete (2HP, offered from 2027–28) → start at French 3</option>
-          <option value="sp:1">Spanish — Level 1 complete (7EP + 8EP, 8HP, or 1HP) → start at Spanish 2</option>
-          <option value="sp:2">Spanish — Levels 1 &amp; 2 complete (2HP, offered from 2027–28) → start at Spanish 3</option>
+          <optgroup label="French">
+            <option value="fr:1">Level 1 complete — MS 7EP+8EP, 8HP or 1HP, or Upper School French 1 → start at French 2</option>
+            <option value="fr:2">Levels 1–2 complete — MS 2HP (from 2027–28) or Upper School French 2 → start at French 3</option>
+            <option value="fr:3">Levels 1–3 complete — Upper School French 3 → start at French 4</option>
+            <option value="fr:4">Levels 1–4 complete — Upper School French 4 → start at French 5 / AP</option>
+          </optgroup>
+          <optgroup label="Spanish">
+            <option value="sp:1">Level 1 complete — MS 7EP+8EP, 8HP or 1HP, or Upper School Spanish 1 → start at Spanish 2</option>
+            <option value="sp:2">Levels 1–2 complete — MS 2HP (from 2027–28) or Upper School Spanish 2 → start at Spanish 3</option>
+            <option value="sp:3">Levels 1–3 complete — Upper School Spanish 3 → start at Spanish 4</option>
+            <option value="sp:4">Levels 1–4 complete — Upper School Spanish 4 → start at Spanish 5 / AP</option>
+          </optgroup>
+          <optgroup label="German">
+            <option value="de:1">Level 1 complete — Upper School German 1 → start at German 2</option>
+            <option value="de:2">Levels 1–2 complete — Upper School German 2 → start at German 3</option>
+            <option value="de:3">Levels 1–3 complete — Upper School German 3 → start at German 4</option>
+            <option value="de:4">Levels 1–4 complete — Upper School German 4 → start at German 5 / AP</option>
+          </optgroup>
+          <optgroup label="Japanese">
+            <option value="ja:1">Level 1 complete — Upper School Japanese 1 → start at Japanese 2</option>
+            <option value="ja:2">Levels 1–2 complete — Upper School Japanese 2 → start at Japanese 3</option>
+            <option value="ja:3">Levels 1–3 complete — Upper School Japanese 3 → start at Japanese 4 / AP</option>
+            <option value="ja:4">Levels 1–4 complete — Upper School Japanese 4 → AP Japanese</option>
+          </optgroup>
+          <optgroup label="Mandarin Chinese">
+            <option value="zh:1">Level 1 complete — Upper School Chinese 1 → start at Chinese 2</option>
+            <option value="zh:2">Levels 1–2 complete — Upper School Chinese 2 → start at Chinese 3</option>
+            <option value="zh:3">Levels 1–3 complete — Upper School Chinese 3 → start at Chinese 4 / AP</option>
+            <option value="zh:4">Levels 1–4 complete — Upper School Chinese 4 → AP Chinese</option>
+          </optgroup>
         </select>
-        <small>Language study in Middle School earns no graduation credit; two consecutive Upper School years are required.</small></label>
+        <small>Language classes taken in Middle School earn no graduation credit by themselves — this just unlocks the next level. Two consecutive Upper School years are still required. If Woodward awarded Upper School credit for a class taken in Middle School, also add it under Transfer credit (Completed: Middle School).</small></label>
       <div class="checks">
         <label class="chk"><input type="checkbox" data-bind="prior.civics8"> Completed <b>Government &amp; Economics (HP)</b> in WA 8th grade<small>Gov/Econ is waived, Modern World History may start in 9th; 3 social studies units are still required.</small></label>
-        <label class="chk"><input type="checkbox" data-bind="prior.gat"> Completed <b>GAT HP</b> in 8th grade<small>Allows Analysis HP.</small></label>
         <label class="chk"><input type="checkbox" data-bind="prior.placement"> Language <b>placement test</b> / heritage speaker<small>Allows starting a language above Level 1 without the prior level.</small></label>
       </div>
     </div>
@@ -201,15 +226,15 @@
 <dialog id="dlg"><form method="dialog"><div id="dlgBody"></div><div class="dlg-actions" id="dlgActions"></div></form></dialog>
 
 <script src="assets/js/config.js?v=g"></script>
-<script src="assets/js/catalog.js?v=i"></script>
+<script src="assets/js/catalog.js?v=j"></script>
 <script src="assets/js/cocurriculars.js?v=g"></script>
-<script src="assets/js/engine.js?v=g"></script>
-<script src="assets/js/reference.js?v=g"></script>
-<script src="assets/js/planio.js?v=g"></script>
+<script src="assets/js/engine.js?v=j"></script>
+<script src="assets/js/reference.js?v=j"></script>
+<script src="assets/js/planio.js?v=j"></script>
 <script src="assets/js/combo.js?v=g"></script>
 <script src="assets/js/docbuilder.js?v=h"></script>
 <script src="assets/js/google.js?v=h"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="assets/js/app.js?v=i"></script>
+<script src="assets/js/app.js?v=j"></script>
 </body>
 </html>
