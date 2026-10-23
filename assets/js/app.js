@@ -6,9 +6,9 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-j';
+  const BUILD = '2026.10.19-k';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '4', 'cocurriculars.js': '1', 'engine.js': '2', 'reference.js': '3', 'planio.js': '2', 'combo.js': '1', 'docbuilder.js': '7', 'google.js': '9' };
+  const EXPECT = { 'catalog.js': '4', 'cocurriculars.js': '1', 'engine.js': '2', 'reference.js': '3', 'planio.js': '2', 'combo.js': '1', 'sound.js': '1', 'docbuilder.js': '7', 'google.js': '9' };
   const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft'];
   function syncProblems() {
     const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
@@ -269,7 +269,7 @@
   function runCel() {
     if (celBusy || !celQueue.length) return;
     celBusy = true;
-    const a = celQueue.shift();
+    const a = celQueue.shift(), _snd = WA.sound && WA.sound.play(a.key === 'total' ? 'finale' : 'musicbox');
     const host = $('#celebrate'); host.innerHTML = ''; host.classList.add('on');
     const colors = ['#f4a72a', '#9d2235', '#47a972', '#6fccdd', '#ffc513', '#df6460', '#002e53'];
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -691,6 +691,16 @@
     renderAuth();
   }
 
+  /* ---------------- celebration sound controls ---------------- */
+  function initSound() {
+    const S = WA.sound, btn = $('#sndBtn'), vol = $('#sndVol'); if (!S || !btn || !vol) return;
+    const sync = () => { const on = S.isOn(); btn.setAttribute('aria-pressed', String(on)); btn.textContent = on ? '🔊 Sound on' : '🔇 Sound off'; vol.disabled = !on; };
+    btn.addEventListener('click', () => { S.setOn(!S.isOn()); sync(); if (S.isOn()) S.play('musicbox'); });
+    vol.value = Math.round(S.volume() * 100);
+    vol.addEventListener('input', () => S.setVolume(vol.value / 100)); vol.addEventListener('change', () => S.play('musicbox'));
+    sync();
+  }
+
   /* ---------------- boot ---------------- */
   function syncBound() { $$('[data-bind]').forEach(el => { const v = getPath(el.dataset.bind); if (el.type === 'checkbox') el.checked = !!v; else el.value = v == null ? '' : v; }); }
   function fullRender() {
@@ -712,8 +722,8 @@
     $('#ovOn').addEventListener('change', e => { state.override.on = e.target.checked; save(); });
     $('#ovReason').addEventListener('input', e => { state.override.reason = e.target.value; save(); });
     ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => $('[data-bind="' + p + '"]').addEventListener('input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
-    fullRender(); initAuth(); initNav(); showSync();
+    fullRender(); initAuth(); initNav(); initSound(); showSync();
   }
-  window.WA.app = { chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
+  window.WA.app = { celebrate: a => { celQueue.push(a); runCel(); }, chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
