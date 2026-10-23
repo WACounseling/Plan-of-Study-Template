@@ -2,7 +2,7 @@
  * course-load rules, and graduation / credit tracking. Pure logic — no DOM. */
 (function (root) {
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['engine.js'] = '1';
+  (WA.versions = WA.versions || {})['engine.js'] = '2';
   const CAT = WA.catalog || require('./catalog.js');
   const COC = WA.cocurr || (typeof require !== 'undefined' ? require('./cocurriculars.js') : null);
   const { by: BY, list: LIST, CORE, LEVEL_RANK, LANGS } = CAT;
@@ -30,7 +30,7 @@
     const d = new Date();
     return {
       info: { studentName: '', studentEmail: '', counselorName: '', counselorEmail: '', date: d.toISOString().slice(0, 10), classOf: '', notes: '' },
-      prior: { psCredit: 0, civics8: false, msMath: 'alg1', gat: false, msLang: '', placement: false, transfers: [] },
+      prior: { psCredit: 0, civics8: false, msMath: 'alg1', msLang: '', placement: false, transfers: [] },
       plan, summer, cocurr: [], override: { on: false, reason: '' }
     };
   }
@@ -60,7 +60,7 @@
   /* ---------- profile flags & pseudo-taken from prior credit ---------- */
   function profileFlags(prior) {
     return {
-      civics8: !!prior.civics8, gat: !!prior.gat, placement: !!prior.placement,
+      civics8: !!prior.civics8, placement: !!prior.placement,
       msAlg1HP: prior.msMath === 'alg1hp' || prior.msMath === 'geohp'
     };
   }
@@ -69,10 +69,9 @@
     const ms = (id, fam, lv, extra) => out.push(Object.assign({ id, fam, lv, start: -1, end: -1, cr: 0, src: 'ms' }, extra || {}));
     if (prior.msMath === 'alg1' || prior.msMath === 'alg1hp' || prior.msMath === 'geohp') ms('ms_alg1', 'alg1', prior.msMath === 'alg1' ? 'EP' : 'HP', { dept: 'math' });
     if (prior.msMath === 'geohp') ms('ms_geo', 'geo', 'HP', { dept: 'math' });
-    if (prior.msLang) {
-      const [code, lvn] = prior.msLang.split(':');
-      ms('ms_' + code + '1', code + '1', lvn === '2' ? 'HP' : 'EP', { dept: 'wl', lang: code });
-      if (lvn === '2') ms('ms_' + code + '2', code + '2', 'HP', { dept: 'wl', lang: code });
+    if (prior.msLang) {  // Middle School or Upper School language classes completed before grade 9: levels 1..N (no credit)
+      const [code, lvn] = prior.msLang.split(':'), N = Math.min(4, Math.max(1, +lvn || 1));
+      for (let i = 1; i <= N; i++) ms('ms_' + code + i, code + i, N === 1 ? 'EP' : 'HP', { dept: 'wl', lang: code });
     }
     if (+prior.psCredit > 0) out.push({ id: 'ms_ps', fam: 'ms_ps', lv: '', start: -1, end: -1, cr: +prior.psCredit, dept: 'sci', src: 'ms', grade: 9, label: 'Physical Science (WA 8th grade)' });
     (prior.transfers || []).forEach((t, i) => {
@@ -149,7 +148,7 @@
     return { ok: true, why: [] };
   }
   function profText(k) {
-    return { civics8: 'HP Government & Economics in 8th grade', gat: 'GAT HP in 8th grade', placement: 'language placement test',
+    return { civics8: 'HP Government & Economics in 8th grade', placement: 'language placement test',
       msAlg1HP: 'Algebra 1 HP in 8th grade' }[k] || k;
   }
 
@@ -339,7 +338,7 @@
     const peAth = !peCourse && athleticsPE(state);
     const peLate = recs.some(r => recPE(r) && r.grade === 12) && !recs.some(r => recPE(r) && r.grade <= 11);
     add('pe', 'Physical Education', 0.5, (peCourse || peAth) ? 0.5 : 0, peCourse || peAth,
-      peCourse ? (peLate ? 'Must be completed by end of semester 6 (grade 11)' : 'PE course / dance') : peAth ? 'Counts via a full WA athletic or Marching Band season (verify with Registrar)' : 'PE course, dance, Marching Band or a full sports season');
+      peCourse ? (peLate ? 'Must be completed by end of semester 6 (grade 11)' : 'PE course, dance, Freshman Foundations or Study Strategies') : peAth ? 'Counts via a full WA athletic or Marching Band season (verify with Registrar)' : 'PE course, dance, Freshman Foundations, Study Strategies, Marching Band or a full sports season');
     // Fine arts, capstone
     const capRecs = recs.filter(r => r.c && r.c.cap);
     const edPair = recs.some(r => r.id === 'ed1') && recs.some(r => r.id === 'ed2');
@@ -361,7 +360,7 @@
     // GHSA checkpoints (credits earned by end of each grade)
     const cum = {}; let run = 0;
     const msPs = recs.filter(r => r.id === 'ms_ps').reduce((a, r) => a + r.cr, 0);
-    GRADES.forEach(g => { run += recs.filter(r => r.id !== 'ms_ps' && r.grade === g).reduce((a, r) => a + r.cr, 0) + (g === 9 ? msPs : 0); cum[g] = Math.round(run * 100) / 100; });
+    GRADES.forEach(g => { run += recs.filter(r => r.id !== 'ms_ps' && r.grade === g).reduce((a, r) => a + r.cr, 0) + (g === 9 ? msPs + recs.filter(r => r.id !== 'ms_ps' && r.grade === 8).reduce((a, r) => a + r.cr, 0) : 0); cum[g] = Math.round(run * 100) / 100; });
     const ghsa = [[9, 5], [10, 11], [11, 17]].map(([g, need]) => ({ grade: g, need, have: cum[g], met: cum[g] >= need }));
 
     // HOPE rigor and NCAA core
