@@ -275,3 +275,11 @@ html.combo-on select.cb-native { display: none !important; }
 .cb-opt.dis { color: #9a9a9a; cursor: not-allowed; }
 .cb-opt mark { background: #ffe39a; color: inherit; border-radius: 2px; padding: 0 1px; }
 .cb-empty { padding: 12px; font-size: 13px; color: var(--muted); }
+
+/* celebration sound controls (bottom bar) */
+.sb-sound { display: inline-flex; align-items: center; gap: 8px; }
+.sb-snd { background: rgba(255,255,255,.14); color: #fff; border: 1.5px solid rgba(255,255,255,.4); padding: 4px 11px; border-radius: 20px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.sb-snd:hover { background: rgba(255,255,255,.24); } .sb-snd[aria-pressed="false"] { opacity: .7; }
+.sb-sound input[type=range] { width: 72px; accent-color: #f4a72a; margin: 0; padding: 0; }
+.sb-sound input[type=range]:disabled { opacity: .4; }
+@media (max-width: 600px) { .sb-sound input[type=range] { display: none; } }
