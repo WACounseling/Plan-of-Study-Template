@@ -6,9 +6,9 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-r';
+  const BUILD = '2026.10.19-s';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '6', 'cocurriculars.js': '1', 'engine.js': '4', 'reference.js': '4', 'distinctions.js': '3', 'planio.js': '4', 'combo.js': '1', 'distui.js': '2', 'sound.js': '1', 'docbuilder.js': '13', 'google.js': '15' };
+  const EXPECT = { 'catalog.js': '6', 'cocurriculars.js': '1', 'engine.js': '4', 'reference.js': '4', 'distinctions.js': '3', 'planio.js': '4', 'combo.js': '1', 'distui.js': '2', 'sound.js': '1', 'docbuilder.js': '13', 'google.js': '16' };
   const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft', 'savePlanCopy', 'listPlanDocs', 'refreshFromDoc'];
   function syncProblems() {
     const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
@@ -582,13 +582,30 @@
     try { return buildPayload(E.problems(st)); } finally { state = prev; }
   }
   const CHIP_SLOT = /^c(\d{1,2})(eng|math|ss|sci|wl|e[123])([fs])$/, CHIP_SUMMER = /^c(\d{1,2})(su[12])$/;
+  /** The order the dropdowns appear in the Doc: each row of the grid left to right (Fall, then Spring), then the summer row. */
+  function docOrder(keys) {
+    const set = new Set(keys), out = [];
+    E.CORE_SLOTS.concat(E.ELEC_SLOTS).forEach(sl => E.GRADES.forEach(g => ['f', 's'].forEach(hf => { const k = 'c' + g + sl.k + hf; if (set.has(k)) out.push(k); })));
+    [9, 10, 11].forEach(g => ['su1', 'su2'].forEach(u => { const k = 'c' + g + u; if (set.has(k)) out.push(k); }));
+    keys.forEach(k => { if (out.indexOf(k) < 0) out.push(k); });
+    return out;
+  }
   function refreshCompute(copy, chips) {
     const st = normState(copy.state || {}), defs = copy.chipDefs || {}, changed = []; let unknown = 0, matched = 0;
     const lab = v => { const x = E.parseSel(v); return x ? E.courseLabel(x.c, x.lv) : '— none —'; };
-    chips.forEach(c => {
-      const d = defs[c.key]; if (!d || c.label == null) { unknown++; return; }
-      const opt = d.options.find(o => o.label === c.label); if (!opt || opt.value === '__na') { unknown++; return; }
+    // match each dropdown to its place in the plan: by its id when the ids are ours, otherwise by its position in the Doc
+    const order = copy.chipOrder || docOrder(Object.keys(defs)), byId = chips.filter(c => defs[c.key]).length;
+    // our option ids are sequential across the Doc (dropdownItem.o0, o1, …), so a selected id identifies its option even if Google returns no definitions
+    const offsets = {}; let acc = 0; order.forEach(k => { offsets[k] = acc; acc += Math.min(50, defs[k] ? defs[k].options.length : 0); });
+    const idxFromId = (sel, key) => { const m = /^dropdownItem\.o([a-z0-9]+)$/.exec(sel || ''); if (!m || offsets[key] == null || !defs[key]) return null; const n = parseInt(m[1], 36) - offsets[key]; return n >= 0 && n < Math.min(50, defs[key].options.length) ? n : null; };
+    const positional = byId < chips.length / 2 && chips.length === order.length;
+    chips.forEach((c0, i) => {
+      const key = positional ? order[i] : c0.key, d = defs[key]; if (!d) { unknown++; return; }
+      let opt = c0.label != null ? d.options.find(o => o.label === c0.label) : null; if (!opt && c0.index != null) opt = d.options[c0.index];
+      if (!opt && c0.selectedId) { const n = idxFromId(c0.selectedId, key); if (n != null) opt = d.options[n]; }
+      if (!opt || opt.value === '__na') { unknown++; return; }
       matched++;
+      const c = { key };
       let m = CHIP_SLOT.exec(c.key), sm = CHIP_SUMMER.exec(c.key);
       if (m) {
         const g = +m[1], cell = st.plan[g] && st.plan[g][m[2]]; if (!cell || cell[m[3]] === opt.value) return;
@@ -653,7 +670,7 @@
       const logoUrl = new URL('assets/img/wordmark-red.png', location.href).href;
       const data = await WA.google.createPlanDoc(payload, { logoUrl });
       // a private copy of the plan (in your drafts folder) lets "Refresh tracker from Doc" recalculate this Doc later
-      try { await WA.google.savePlanCopy(data.id, { app: 'WA Course Planner', v: 1, savedAt: new Date().toISOString(), state: JSON.parse(JSON.stringify(state)), chipDefs: payload.chipDefs }, i.studentName.trim() + ' — ' + i.classOf); data.canRefresh = true; }
+      try { await WA.google.savePlanCopy(data.id, { app: 'WA Course Planner', v: 1, savedAt: new Date().toISOString(), state: JSON.parse(JSON.stringify(state)), chipDefs: payload.chipDefs, chipOrder: docOrder(Object.keys(payload.chipDefs)) }, i.studentName.trim() + ' — ' + i.classOf); data.canRefresh = true; }
       catch (e) { data.warnings = (data.warnings || []).concat(['A private copy of the plan could not be saved, so “Refresh tracker from Doc” will not be available for this Doc (' + (e.message || e) + ').']); }
       msg.innerHTML = '<div class="ok"><b>✓ Course plan created in your Google Drive.</b><br>You own it and can edit it' + (data.shared ? '; ' + esc(i.studentEmail) + ' has view-only access.' : '.') +
         '<br><a href="' + esc(data.url) + '" target="_blank" rel="noopener">Open the Google Doc →</a>' + (data.warnings && data.warnings.length ? '<br><small><b>Please note:</b> ' + esc(data.warnings.join(' ')) + '</small>' : '') + '</div>';
@@ -820,6 +837,6 @@
     step('plan display', fullRender); step('sign-in display', renderAuth); step('navigation', initNav); step('sound', initSound); step('file check', showSync);
     if (problems.length) showInitProblem(problems);
   }
-  window.WA.app = { refreshCompute, normState, modelFor, celebrate: a => { celQueue.push(a); runCel(); }, chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
+  window.WA.app = { docOrder, refreshCompute, normState, modelFor, celebrate: a => { celQueue.push(a); runCel(); }, chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
