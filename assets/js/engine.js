@@ -2,7 +2,7 @@
  * course-load rules, and graduation / credit tracking. Pure logic — no DOM. */
 (function (root) {
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['engine.js'] = '2';
+  (WA.versions = WA.versions || {})['engine.js'] = '4';
   const CAT = WA.catalog || require('./catalog.js');
   const COC = WA.cocurr || (typeof require !== 'undefined' ? require('./cocurriculars.js') : null);
   const { by: BY, list: LIST, CORE, LEVEL_RANK, LANGS } = CAT;
@@ -29,9 +29,9 @@
     });
     const d = new Date();
     return {
-      info: { studentName: '', studentEmail: '', counselorName: '', counselorEmail: '', date: d.toISOString().slice(0, 10), classOf: '', notes: '' },
+      info: { studentName: '', studentEmail: '', counselorName: '', counselorEmail: '', date: d.toISOString().slice(0, 10), classOf: '', notes: '', colleges: '', major: '' },
       prior: { psCredit: 0, civics8: false, msMath: 'alg1', msLang: '', placement: false, transfers: [] },
-      plan, summer, cocurr: [], override: { on: false, reason: '' }
+      plan, summer, cocurr: [], dist: { interest: {}, checks: {} }, override: { on: false, reason: '' }
     };
   }
 
@@ -338,7 +338,7 @@
     const peAth = !peCourse && athleticsPE(state);
     const peLate = recs.some(r => recPE(r) && r.grade === 12) && !recs.some(r => recPE(r) && r.grade <= 11);
     add('pe', 'Physical Education', 0.5, (peCourse || peAth) ? 0.5 : 0, peCourse || peAth,
-      peCourse ? (peLate ? 'Must be completed by end of semester 6 (grade 11)' : 'PE course, dance, Freshman Foundations or Study Strategies') : peAth ? 'Counts via a full WA athletic or Marching Band season (verify with Registrar)' : 'PE course, dance, Freshman Foundations, Study Strategies, Marching Band or a full sports season');
+      peCourse ? (peLate ? 'Must be completed by end of semester 6 (grade 11)' : 'Physical Conditioning, Dance Fitness (CP) or year-long dance') : peAth ? 'Counts via a full WA athletic or Marching Band season (verify with Registrar)' : 'Physical Conditioning, Dance Fitness (CP), year-long dance, Marching Band or a full sports season');
     // Fine arts, capstone
     const capRecs = recs.filter(r => r.c && r.c.cap);
     const edPair = recs.some(r => r.id === 'ed1') && recs.some(r => r.id === 'ed2');
