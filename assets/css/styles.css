@@ -283,3 +283,40 @@ html.combo-on select.cb-native { display: none !important; }
 .sb-sound input[type=range] { width: 72px; accent-color: #f4a72a; margin: 0; padding: 0; }
 .sb-sound input[type=range]:disabled { opacity: .4; }
 @media (max-width: 600px) { .sb-sound input[type=range] { display: none; } }
+
+/* ---------- graduation distinctions ---------- */
+.dist-interest { border: 1.5px solid var(--gray); border-radius: 10px; padding: 12px 16px 4px; margin: 0 0 14px; }
+.dist-interest legend { font-weight: 700; color: var(--navy); font-size: 13px; padding: 0 8px; }
+.dist-opts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.dist-opt { display: flex; gap: 10px; align-items: flex-start; background: var(--mist); border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 13px; }
+.dist-opt input { margin-top: 3px; width: 18px; height: 18px; flex: none; accent-color: var(--red); }
+.dist-opt b { display: block; color: var(--navy); } .dist-opt small { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.4; margin-top: 2px; }
+.dist-card { border: 2px solid var(--gray); border-radius: 12px; padding: 14px 18px 12px; margin: 14px 0; background: #fff; }
+.dist-card.part { border-color: var(--gold); } .dist-card.done { border-color: var(--green); } .dist-card.met { border-color: var(--green); background: #f6fbf8; }
+.dist-card header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; } .dist-card h3 { margin: 0; font-size: 16px; color: var(--navy); }
+.dstat { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--mist); color: var(--muted); } .dstat.part { background: var(--gold-bg); color: #8a5a00; } .dstat.done { background: var(--green-bg); color: #1f7a4a; }
+.dmeta { font-size: 12.5px; color: #444; margin: 6px 0 4px; } .dprog { font-size: 12.5px; font-weight: 600; color: var(--slate); margin: 4px 0 8px; }
+.dist-card h4 { margin: 12px 0 6px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--red); }
+.dgroup { background: var(--mist); border-radius: 8px; padding: 10px 14px; margin: 8px 0; } .dgroup.met { background: var(--green-bg); }
+.dgh { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--navy); } .dgh .cnt { font-weight: 700; color: var(--red); white-space: nowrap; } .dgroup.met .dgh .cnt { color: #1f7a4a; }
+.dgroup .note { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
+.dlist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px 18px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.dlist li { font-size: 13px; padding: 2px 0; display: flex; gap: 8px; align-items: baseline; }
+.dlist li.miss { color: #9a9a9a; font-weight: 400; } .dlist li.hit { color: var(--navy); font-weight: 800; background: #fff7dd; border-radius: 4px; padding: 2px 6px; margin: 0 -6px; }
+.dlist .dmark { width: 14px; flex: none; text-align: center; } .dlist li.hit .dmark { color: #1f7a4a; } .dlist small { font-weight: 400; color: var(--muted); }
+.dchecks { list-style: none; margin: 4px 0 0; padding: 0; } .dcheck { padding: 3px 0; font-size: 13px; } .dcheck label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.dcheck input { margin-top: 3px; width: 17px; height: 17px; flex: none; accent-color: var(--green); } .dcheck.on span { color: var(--navy); font-weight: 700; }
+@media print { .dist-card { break-inside: avoid; } }
+
+.dcheck label { font-weight: 400; } .dcheck.on span { font-weight: 700; }
+
+.refresh-row { align-items: center; margin-top: 10px; } .refresh-row .help { margin: 0; }
+
+/* ---------- distinctions: one card per distinction with its own interest checkbox ---------- */
+.dist-card.off { border-color: var(--gray); background: #fff; padding-bottom: 8px; }
+.dist-head { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; font-weight: 400; margin: 0; }
+.dist-head input { margin-top: 3px; width: 20px; height: 20px; flex: none; accent-color: var(--red); }
+.dist-title { flex: 1; } .dist-title b { display: block; color: var(--navy); font-size: 14.5px; } .dist-title small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.dist-head .dstat { flex: none; align-self: center; }
+.dist-body { margin-top: 6px; padding-top: 8px; border-top: 1px solid #e5e5e8; }
+.dother { margin: 10px 0 2px; font-size: 12px; font-style: italic; color: var(--muted); }
