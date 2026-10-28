@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css?v=k">
+<link rel="stylesheet" href="assets/css/styles.css?v=o">
 </head>
 <body>
 <a class="skip" href="#main">Skip to planner</a>
@@ -40,8 +40,10 @@
         <li><a href="#grade-12" data-spy="grade-12"><span class="sn-text">12th Grade</span><span class="sn-dot s-none" data-dot="g12"></span></a></li>
       </ul></li>
     <li><a href="#s-cocurr" data-spy="s-cocurr"><span class="sn-num">4</span><span class="sn-text">Cocurricular Activities</span><span class="sn-dot s-none" data-dot="coc"></span></a></li>
+    <li><a href="#s-college" data-spy="s-college"><span class="sn-num">✎</span><span class="sn-text">College &amp; Career Interests</span><span class="sn-dot s-none" data-dot="college"></span></a></li>
     <li><a href="#s-notes" data-spy="s-notes"><span class="sn-num">+</span><span class="sn-text">Counselor Notes</span><span class="sn-dot s-none" data-dot="notes"></span></a></li>
     <li><a href="#s-tracker" data-spy="s-tracker"><span class="sn-num">✓</span><span class="sn-text">Credit Tracker</span><span class="sn-badge" id="snTrk">0/10</span></a></li>
+    <li><a href="#s-dist" data-spy="s-dist"><span class="sn-num">★</span><span class="sn-text">Graduation Distinctions</span><span class="sn-dot s-none" data-dot="dist"></span></a></li>
     <li><a href="#s-ref" data-spy="s-ref"><span class="sn-num">i</span><span class="sn-text">Graduation Reference</span></a></li>
     <li><a href="#s-submit" data-spy="s-submit"><span class="sn-num">5</span><span class="sn-text">Review &amp; Submit</span><span class="sn-dot s-none" data-dot="submit"></span></a></li>
   </ol>
@@ -162,9 +164,21 @@
     <button type="button" class="btn ghost" id="addCoc">+ Add activity</button>
   </section>
 
+  <section class="card" id="s-college" aria-labelledby="h-college">
+    <h2 id="h-college"><span class="step">✎</span>College &amp; Career Interests <span class="muted">(optional)</span></h2>
+    <p class="help">Two open questions to help guide the conversation. The responses are printed on page 2 of the Google Doc.</p>
+    <div class="grid g2">
+      <label>Is the student interested in any specific colleges or universities? If so, which ones?
+        <textarea data-bind="info.colleges" aria-label="Colleges or universities of interest (optional)" rows="3" maxlength="240" placeholder="For example: Georgia Tech, Emory, UGA…"></textarea></label>
+      <label>Does the student have a particular major or path of study in mind? If so, what is it?
+        <textarea data-bind="info.major" aria-label="Major or path of study in mind (optional)" rows="3" maxlength="240" placeholder="For example: engineering, nursing, business, undecided…"></textarea></label>
+    </div>
+    <small>Free responses, up to 240 characters each.</small>
+  </section>
+
   <section class="card" id="s-notes">
     <h2 class="plain-h"><span class="step">+</span>Counselor Notes <span class="muted">(optional — included in the Google Doc)</span></h2>
-    <textarea data-bind="info.notes" rows="3" placeholder="Goals, scholarship or NCAA plans, accommodations, follow-ups…"></textarea>
+    <textarea data-bind="info.notes" aria-label="Counselor notes (optional)" rows="3" placeholder="Goals, scholarship or NCAA plans, accommodations, follow-ups…"></textarea>
   </section>
 
   <!-- TRACKER -->
@@ -177,6 +191,13 @@
     <h3>Scholarship &amp; eligibility watch</h3>
     <div id="trackerSchol" class="schol"></div>
   </section>
+
+  <section class="card" id="s-dist" aria-labelledby="h-dist">
+    <h2 id="h-dist"><span class="step">★</span>Graduation Distinctions <span class="muted">(optional)</span></h2>
+    <p class="help">Woodward students can earn a “Distinction in Global Studies, Service Learning, Sustainability or Media” read at graduation. Tick any you are interested in: its required courses are listed beneath it and turn bold with a ✓ as they appear in the four-year plan, and a pop-up appears when all of a distinction’s courses are planned. The other requirements (applications, hours, capstone projects, portfolios, averages) are a checklist in the Google Doc.</p>
+    <div id="distTrack" aria-live="polite"></div>
+  </section>
+
 
   <!-- REFERENCE -->
   <details class="card ref" id="s-ref">
@@ -200,6 +221,8 @@
       <button type="button" class="btn ghost" id="loadDraft">Open a saved draft…</button>
       <button type="button" class="btn link" id="resetAll">Start over</button>
     </div>
+    <div class="actions refresh-row"><button type="button" class="btn ghost" id="refreshBtn">Refresh a Doc’s tracker…</button><span class="help small">Changed courses with the dropdowns in a Google Doc you created? This recalculates its graduation and distinction trackers in place.</span></div>
+    <div id="refreshMsg" class="submitmsg" role="status" aria-live="polite"></div>
     <p class="help small">Drafts are saved <b>privately in your own Google Drive</b>, in a folder named “WA Course Planner Drafts.” They are never shared with students and nothing is saved to this computer’s Downloads folder.</p>
     <div id="submitMsg" class="submitmsg" role="status" aria-live="polite"></div>
   </section>
@@ -227,16 +250,18 @@
 <dialog id="dlg"><form method="dialog"><div id="dlgBody"></div><div class="dlg-actions" id="dlgActions"></div></form></dialog>
 
 <script src="assets/js/config.js?v=g"></script>
-<script src="assets/js/catalog.js?v=j"></script>
+<script src="assets/js/catalog.js?v=m"></script>
 <script src="assets/js/cocurriculars.js?v=g"></script>
-<script src="assets/js/engine.js?v=j"></script>
-<script src="assets/js/reference.js?v=j"></script>
-<script src="assets/js/planio.js?v=j"></script>
+<script src="assets/js/engine.js?v=o"></script>
+<script src="assets/js/reference.js?v=m"></script>
+<script src="assets/js/distinctions.js?v=n"></script>
+<script src="assets/js/planio.js?v=o"></script>
+<script src="assets/js/distui.js?v=n"></script>
 <script src="assets/js/combo.js?v=g"></script>
-<script src="assets/js/docbuilder.js?v=h"></script>
-<script src="assets/js/google.js?v=h"></script>
+<script src="assets/js/docbuilder.js?v=o"></script>
+<script src="assets/js/google.js?v=o"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="assets/js/sound.js?v=k"></script>
-<script src="assets/js/app.js?v=k"></script>
+<script src="assets/js/app.js?v=o"></script>
 </body>
 </html>
