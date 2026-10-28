@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const WA = window.WA = window.WA || {};
-  (WA.versions = WA.versions || {})['google.js'] = '15';
+  (WA.versions = WA.versions || {})['google.js'] = '16';
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
   const SCOPE = 'openid email profile ' + DRIVE_FILE;
@@ -356,20 +356,33 @@
   };
   const tabOf = doc => (doc.tabs && doc.tabs[0] && doc.tabs[0].documentTab) || doc;
   const getTabDoc = (id, tok) => api(DOCS + encodeURIComponent(id) + '?includeTabsContent=true', {}, tok);
+  // Google's response nests things in more than one possible way, so look for a field by name instead of assuming one shape
+  function deepFind(o, name, depth) {
+    if (!o || typeof o !== 'object' || (depth || 0) > 5) return undefined;
+    if (o[name] != null && typeof o[name] !== 'object') return o[name];
+    for (const k of Object.keys(o)) { const v = deepFind(o[k], name, (depth || 0) + 1); if (v !== undefined) return v; }
+    return undefined;
+  }
+  function findOptions(def) {
+    if (!def || typeof def !== 'object') return [];
+    const props = def.dropdownDefinitionProperties || def; if (Array.isArray(props.options)) return props.options;
+    for (const k of Object.keys(def)) { const v = def[k]; if (Array.isArray(v) && v.length && v[0] && typeof v[0] === 'object' && (v[0].optionId || v[0].id || v[0].displayValue)) return v; if (v && typeof v === 'object' && !Array.isArray(v)) { const r = findOptions(v); if (r.length) return r; } }
+    return [];
+  }
   function readChips(tab) {
-    const defs = tab.dropdownDefinitions || {}, chips = [], kinds = new Set();
+    const defs = tab.dropdownDefinitions || {}, chips = [], kinds = new Set(), optMap = {};
+    Object.keys(defs).forEach(id => findOptions(defs[id]).forEach((o, i) => { const oid = o.optionId || o.id; if (oid) optMap[oid] = { label: o.displayValue || o.text || o.label || null, index: i }; }));
     walk(tab.body && tab.body.content, n => {
       if (n.type === 't') return;
       (n.el.paragraph.elements || []).forEach(pe => {
         Object.keys(pe).forEach(k => { if (!/^(startIndex|endIndex|textRun)$/.test(k)) kinds.add(k); });
-        const dd = pe.dropdown || Object.keys(pe).map(k => (/dropdown/i.test(k) ? pe[k] : null)).find(x => x && typeof x === 'object' && (x.dropdownDefinitionId || x.definitionId));
+        const dd = pe.dropdown || Object.keys(pe).map(k => (/dropdown/i.test(k) ? pe[k] : null)).find(x => x && typeof x === 'object');
         if (!dd) return;
-        const id = dd.dropdownDefinitionId || dd.definitionId, sel = dd.selectedOptionId || dd.optionId, def = defs[id], props = def && (def.dropdownDefinitionProperties || def);
-        const opt = ((props && props.options) || []).find(o => (o.optionId || o.id) === sel);
-        chips.push({ key: String(id || '').replace(/^kix\./, ''), label: opt ? (opt.displayValue || opt.text || opt.label || null) : null });
+        const id = deepFind(dd, 'dropdownDefinitionId') || deepFind(dd, 'definitionId'), sel = deepFind(dd, 'selectedOptionId') || deepFind(dd, 'optionId'), hit = (sel && optMap[sel]) || null;
+        chips.push({ key: String(id || '').replace(/^kix\./, ''), label: hit ? hit.label : null, index: hit ? hit.index : null, selectedId: sel || null, defId: id || null });
       });
     });
-    return { chips, kinds: Array.from(kinds) };
+    return { chips, kinds: Array.from(kinds), options: Object.keys(optMap).length };
   }
   function textBetween(tab, s, e) {
     let out = '';
@@ -395,6 +408,7 @@
     const rc = readChips(tab);
     if (!rc.chips.length) { const e = new Error('No dropdown choices could be read from this Doc, so nothing was changed. (Element types found in the Doc: ' + (rc.kinds.join(', ') || 'text only') + '.)'); e.nochips = true; throw e; }
     const out = compute(copy, rc.chips), slots = out.slots || {};
+    if (out.summary && out.summary.matched === 0) { const f = rc.chips[0] || {}; const e = new Error('The planner read ' + rc.chips.length + ' dropdowns from the Doc but could not match any of them to the saved plan, so nothing was changed. (First dropdown: id “' + (f.defId || '?') + '”, selected option “' + (f.selectedId || '?') + '”, text “' + (f.label == null ? 'not found' : f.label) + '”; options known to the Doc: ' + rc.options + '.)'); e.nochips = true; throw e; }
     // 1) rewrite each tracker text (latest position first so earlier positions stay valid)
     const ops = [];
     Object.keys(slots).forEach(name => { const e = ranges[name]; if (e) (e.namedRanges || []).forEach(nr => { const r = (nr.ranges || [])[0]; if (r) ops.push({ name, s: r.startIndex, e: r.endIndex, text: slots[name].text }); }); });
