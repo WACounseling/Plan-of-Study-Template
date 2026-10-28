@@ -1,15 +1,15 @@
 /* Woodward Academy Four-Year Course Planner — UI */
 (function () {
   'use strict';
-  const WA = window.WA, E = WA.engine, CAT = WA.catalog, COC = WA.cocurr, REF = WA.reference;
+  const WA = window.WA, E = WA.engine, CAT = WA.catalog, COC = WA.cocurr, REF = WA.reference, DIST = WA.distinctions, DUI = WA.distui;
   const CFG = window.WA_CONFIG || {};
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-k';
+  const BUILD = '2026.10.19-o';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '4', 'cocurriculars.js': '1', 'engine.js': '2', 'reference.js': '3', 'planio.js': '2', 'combo.js': '1', 'sound.js': '1', 'docbuilder.js': '7', 'google.js': '9' };
-  const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft'];
+  const EXPECT = { 'catalog.js': '6', 'cocurriculars.js': '1', 'engine.js': '4', 'reference.js': '4', 'distinctions.js': '3', 'planio.js': '4', 'combo.js': '1', 'distui.js': '2', 'sound.js': '1', 'docbuilder.js': '13', 'google.js': '13' };
+  const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft', 'savePlanCopy', 'listPlanDocs', 'refreshFromDoc'];
   function syncProblems() {
     const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
     if (!bad.includes('google.js') && NEEDS.some(f => typeof (WA.google || {})[f] !== 'function')) bad.push('google.js');
@@ -45,18 +45,21 @@
   function load() {
     try { const raw = sessionStorage.getItem(SKEY); if (raw) mergeState(JSON.parse(raw)); } catch (e) { /* ignore */ }
   }
-  function mergeState(o) {
+  function normState(o) {
     const base = E.emptyState();
-    state = {
+    const st = {
       info: Object.assign(base.info, o.info || {}), prior: Object.assign(base.prior, o.prior || {}),
-      plan: base.plan, summer: base.summer, cocurr: Array.isArray(o.cocurr) ? o.cocurr : [], override: Object.assign(base.override, o.override || {})
+      plan: base.plan, summer: base.summer, cocurr: Array.isArray(o.cocurr) ? o.cocurr : [], dist: WA.planio.sanitizeDist(o.dist), override: Object.assign(base.override, o.override || {})
     };
     E.GRADES.forEach(g => {
-      E.ALL_SLOTS.forEach(s => { const c = o.plan && o.plan[g] && o.plan[g][s.k]; if (c) state.plan[g][s.k] = { f: c.f || '', s: c.s || '' }; });
-      E.SUMMER_SLOTS.forEach(s => { const c = o.summer && o.summer[g] && o.summer[g][s.k]; if (c) state.summer[g][s.k] = c; });
+      E.ALL_SLOTS.forEach(s => { const c = o.plan && o.plan[g] && o.plan[g][s.k]; if (c) st.plan[g][s.k] = { f: c.f || '', s: c.s || '' }; });
+      E.SUMMER_SLOTS.forEach(s => { const c = o.summer && o.summer[g] && o.summer[g][s.k]; if (c) st.summer[g][s.k] = c; });
     });
-    if (!Array.isArray(state.prior.transfers)) state.prior.transfers = [];
+    if (!Array.isArray(st.prior.transfers)) st.prior.transfers = [];
+    return st;
   }
+  function mergeState(o) { state = normState(o); }
+
   let saveT;
   function save() {
     clearTimeout(saveT);
@@ -202,13 +205,20 @@
     const P = E.problems(state);
     renderChips(P);
     renderTracker(P.tracker);
+    const D = DIST.evaluate(E.allTaken(state), state.dist); renderDist(D);
     renderReadiness(P);
-    if (userAction) celebrateDiff(P.tracker); else prevMet = metSet(P.tracker);
+    if (userAction) celebrateDiff(P.tracker, D); else prevMet = metSet(P.tracker, D);
     if (WA.combo) WA.combo.refreshAll();
     save();
   }
   const stClass = v => (!v ? '' : v.state === 'blocked' ? 'err' : v.state === 'approval' ? 'warn' : '');
-  const metSet = t => new Set(t.areas.filter(a => a.met).map(a => a.key));
+  const metSet = (t, D) => new Set(t.areas.filter(a => a.met).map(a => a.key).concat((D || []).filter(x => x.interested && x.met).map(x => 'dist:' + x.id)));
+  /* ---------------- graduation distinctions ---------------- */
+  const onInterest = (id, on) => { if (on) state.dist.interest[id] = true; else delete state.dist.interest[id]; update(false); };
+  function renderDist(D) {
+    DUI.render($('#distTrack'), D, onInterest);
+    const want = D.filter(x => x.interested); setDot('dist', !want.length ? 'none' : want.every(x => x.met) ? 'done' : 'part', !want.length ? 'Optional — none chosen' : want.every(x => x.met) ? 'All chosen distinctions complete' : 'In progress');
+  }
 
   function renderChips(P) {
     E.GRADES.forEach(g => {
@@ -261,9 +271,12 @@
   const STAR = '<svg viewBox="0 0 24 24"><path d="M12 1.5l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.2 5.7 20.9l1.5-7.1L1.8 8.9 9 8.1z" fill="%C" stroke="#fff" stroke-width="1"/></svg>';
   const CAP = '<svg class="cap" viewBox="0 0 96 76" aria-hidden="true"><polygon points="48,6 94,26 48,46 2,26" fill="#002e53"/><path d="M22 38v16c0 7 12 14 26 14s26-7 26-14V38L48 50z" fill="#4c768e"/><path d="M84 29v28" stroke="#f4a72a" stroke-width="3.5" stroke-linecap="round"/><circle cx="84" cy="61" r="5.5" fill="#f4a72a"/><polygon points="48,6 94,26 48,46 2,26" fill="none" stroke="#fff" stroke-width="1.2" opacity=".5"/></svg>';
   const celQueue = []; let celBusy = false;
-  function celebrateDiff(t) {
-    const now = metSet(t);
-    if (prevMet) t.areas.forEach(a => { if (a.met && !prevMet.has(a.key)) celQueue.push(a); });
+  function celebrateDiff(t, D) {
+    const now = metSet(t, D);
+    if (prevMet) {
+      t.areas.forEach(a => { if (a.met && !prevMet.has(a.key)) celQueue.push(a); });
+      (D || []).forEach(x => { if (x.interested && x.met && !prevMet.has('dist:' + x.id)) celQueue.push({ key: 'dist:' + x.id, label: 'Distinction in ' + x.name, dist: true }); });
+    }
     prevMet = now; runCel();
   }
   function runCel() {
@@ -274,7 +287,7 @@
     const colors = ['#f4a72a', '#9d2235', '#47a972', '#6fccdd', '#ffc513', '#df6460', '#002e53'];
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const card = h('div', { class: 'cel-card' }, h('div', { class: 'icons' }, h('img', { src: 'assets/img/wa-icon.png', alt: '' }), h('span', { html: CAP })),
-      h('h4', { text: a.key === 'total' ? 'All 22 units planned!' : a.label + ' complete!' }), h('p', { text: a.key === 'total' ? 'Ready to graduate' : 'Graduation requirement met' }));
+      h('h4', { text: a.dist ? a.label + '!' : a.key === 'total' ? 'All 22 units planned!' : a.label + ' complete!' }), h('p', { text: a.dist ? 'Distinction courses planned' : a.key === 'total' ? 'Ready to graduate' : 'Graduation requirement met' }));
     host.appendChild(card);
     if (!reduce) for (let i = 0; i < 30; i++) {
       const ang = (i / 30) * Math.PI * 2 + Math.random() * 0.4, dist = 150 + Math.random() * 190;
@@ -341,7 +354,7 @@
     state.cocurr.forEach((c, i) => {
       const known = !c.name || COC.list.some(a => a.name === c.name);
       const act = h('select', { html: cocOptions(), 'data-cb': '1', 'aria-label': 'Activity' }); act.value = known ? c.name : '__other';
-      const other = h('input', { type: 'text', placeholder: 'Activity name', value: known ? '' : c.name }); other.style.display = known ? 'none' : '';
+      const other = h('input', { type: 'text', placeholder: 'Activity name', 'aria-label': 'Activity name', value: known ? '' : c.name }); other.style.display = known ? 'none' : '';
       const stat = h('select', { html: COC.STATUS.map(s => '<option value="' + s.v + '">' + s.label + '</option>').join(''), 'aria-label': 'Participation' }); stat.value = c.status || 'active';
       const hint = h('small', { text: noteFor(c.name) });
       act.addEventListener('change', () => { if (act.value === '__other') { other.style.display = ''; c.name = other.value; } else { other.style.display = 'none'; c.name = act.value; } hint.textContent = noteFor(c.name); update(true); });
@@ -415,6 +428,7 @@
     setDot('grades', bad ? 'err' : done === 4 ? 'done' : sel ? 'part' : 'none', bad ? 'Some grades need fixes' : done === 4 ? 'All four grades planned' : sel ? 'In progress' : 'Not started');
     const hasCoc = state.cocurr.some(c => c.name);
     setDot('coc', hasCoc ? 'done' : 'none', hasCoc ? 'Activities entered' : 'Optional — nothing entered');
+    setDot('college', (state.info.colleges.trim() || state.info.major.trim()) ? 'done' : 'none', (state.info.colleges.trim() || state.info.major.trim()) ? 'Interests entered' : 'Optional — nothing entered');
     setDot('notes', state.info.notes.trim() ? 'done' : 'none', state.info.notes.trim() ? 'Notes entered' : 'Optional — no notes');
     const t = P.tracker, n = t.areas.filter(a => a.met).length, b = $('#snTrk');
     b.textContent = n + '/' + t.areas.length; b.className = 'sn-badge ' + (n === t.areas.length ? 's-done' : n ? 's-part' : 's-err');
@@ -425,7 +439,7 @@
     $('#snGrad').textContent = state.info.classOf ? 'Graduating Spring ' + state.info.classOf : 'Choose a graduation year in Step 1';
   }
   function initNav() {
-    const ids = ['s-info', 's-prior', 's-grades', 'grade-9', 'grade-10', 'grade-11', 'grade-12', 's-cocurr', 's-notes', 's-tracker', 's-ref', 's-submit'];
+    const ids = ['s-info', 's-prior', 's-grades', 'grade-9', 'grade-10', 'grade-11', 'grade-12', 's-cocurr', 's-college', 's-notes', 's-tracker', 's-dist', 's-ref', 's-submit'];
     const links = {}; $$('#sidenav a[data-spy]').forEach(a => { links[a.dataset.spy] = a; });
     $$('#sidenav a[href^="#"]').forEach(a => a.addEventListener('click', e => {
       const id = a.getAttribute('href').slice(1), t = document.getElementById(id); if (!t) return;
@@ -549,17 +563,67 @@
       version: 2,
       student: { name: i.studentName.trim(), email: i.studentEmail.trim() }, counselor: { name: i.counselorName.trim(), email: (WA.google && WA.google.user ? WA.google.user.email : i.counselorEmail).trim() },
       date: i.date, dateText: new Date(i.date + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      classOf: i.classOf, gradText: i.classOf ? 'Spring ' + i.classOf : '', notes: i.notes.trim(), grades, chipDefs: CH.defs, prior: { ms, transfers: tr },
+      classOf: i.classOf, gradText: i.classOf ? 'Spring ' + i.classOf : '', interests: { colleges: (i.colleges || '').trim(), major: (i.major || '').trim() }, notes: i.notes.trim(), grades, chipDefs: CH.defs, prior: { ms, transfers: tr },
       cocurr: state.cocurr.filter(c => c.name).map(c => { const a = COC.list.find(x => x.name === c.name); return { name: c.name, cat: a ? a.cat : 'Other', status: c.status === 'active' ? 'Currently participating' : 'Interested in exploring' }; }),
       tracker: {
         areas: t.areas.map(a => ({ key: a.key, label: a.label, have: a.have, req: a.req, status: a.status, detail: a.detail })),
         ghsa: t.ghsa.map(x => ({ grade: x.grade, need: x.need, have: x.have, met: x.met })).concat([{ grade: 12, need: 22, have: t.cum[12], met: t.cum[12] >= 22 }]),
         rigor: t.rigor, ncaa: { total: t.ncaa.total, met: t.ncaa.met }
       },
+      distinctions: DIST.evaluate(E.allTaken(state), state.dist).filter(x => x.interested),
       approvals: P.approvals, override: { on: !!state.override.on, reason: state.override.reason || '', issues: state.override.on ? P.errs : [] },
       reference: REF
     };
   }
+
+  /* ---------------- Refresh tracker from Doc ---------------- */
+  function modelFor(st) {   // the same Doc content the planner would generate, for any saved plan
+    const prev = state; state = st;
+    try { return buildPayload(E.problems(st)); } finally { state = prev; }
+  }
+  const CHIP_SLOT = /^c(\d{1,2})(eng|math|ss|sci|wl|e[123])([fs])$/, CHIP_SUMMER = /^c(\d{1,2})(su[12])$/;
+  function refreshCompute(copy, chips) {
+    const st = normState(copy.state || {}), defs = copy.chipDefs || {}, changed = []; let unknown = 0;
+    const lab = v => { const x = E.parseSel(v); return x ? E.courseLabel(x.c, x.lv) : '— none —'; };
+    chips.forEach(c => {
+      const d = defs[c.key]; if (!d || c.label == null) { unknown++; return; }
+      const opt = d.options.find(o => o.label === c.label); if (!opt || opt.value === '__na') { unknown++; return; }
+      let m = CHIP_SLOT.exec(c.key), sm = CHIP_SUMMER.exec(c.key);
+      if (m) {
+        const g = +m[1], cell = st.plan[g] && st.plan[g][m[2]]; if (!cell || cell[m[3]] === opt.value) return;
+        changed.push(ORD[g] + ' ' + ((E.ALL_SLOTS.find(x => x.k === m[2]) || {}).label || m[2]) + (m[3] === 's' ? ' (Spring)' : '') + ': ' + lab(cell[m[3]]) + ' → ' + lab(opt.value));
+        cell[m[3]] = opt.value; if (m[3] === 'f') { const x = E.parseSel(opt.value); if (x && x.c.t === 'Y') cell.s = ''; }
+      } else if (sm) {
+        const g = +sm[1], sl = st.summer[g]; if (!sl || sl[sm[2]] === opt.value) return;
+        changed.push('Summer after ' + ORD[g] + ': ' + lab(sl[sm[2]]) + ' → ' + lab(opt.value)); sl[sm[2]] = opt.value;
+      }
+    });
+    const payload = modelFor(st), P = E.problems(st);
+    return { slots: WA.docbuilder.slots(payload), copy: Object.assign({}, copy, { state: JSON.parse(JSON.stringify(st)), savedAt: new Date().toISOString() }),
+      summary: { changed, unknown, issues: P.errs.slice(0, 6), areas: P.tracker.areas.filter(a => a.met).length + ' of ' + P.tracker.areas.length } };
+  }
+  async function refreshDoc() {
+    const out = $('#refreshMsg'), bad = t => { out.innerHTML = '<div class="bad">' + t + '</div>'; }; out.innerHTML = '';
+    if (showSync()) return bad('<b>Cannot refresh yet:</b> some site files are out of date. See the red notice at the top of the page.');
+    try { await WA.google.ensureToken(); } catch (e) { bad('<b>Please sign in with Google again.</b> ' + esc(e.message || String(e))); renderAuth(); return; }
+    let docs; try { docs = await WA.google.listPlanDocs(); } catch (e) { return bad(esc(e.message || String(e))); }
+    if (!docs.length) return bad('No plan Docs with a saved plan were found in your Drive. Docs created before this feature can’t be refreshed — submit the plan again to make one that can.');
+    const opts = docs.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + ' — ' + esc(new Date(f.modifiedTime).toLocaleDateString()) + '</option>').join('');
+    const ok = await dialog('<h3>Refresh which Google Doc?</h3><p>The planner reads the dropdown choices in the Doc, recalculates the graduation tracker and any distinctions, and updates them <b>in the same Doc</b>. Your “Completed” checkboxes and anything else you typed are left alone.</p><label>Doc <select id="rfSel">' + opts + '</select></label>', [{ text: 'Cancel', value: false }, { text: 'Refresh', value: true, primary: true }]);
+    if (!ok) return;
+    const id = $('#rfSel').value, btn = $('#refreshBtn'); btn.disabled = true; btn.textContent = 'Refreshing…';
+    try {
+      const r = await WA.google.refreshFromDoc(id, refreshCompute), s = r.summary || {};
+      out.innerHTML = '<div class="ok"><b>✓ Refreshed “' + esc(r.name) + '”.</b> ' + r.updated + ' tracker item' + (r.updated === 1 ? '' : 's') + ' updated; ' + esc(s.areas || '') + ' graduation requirements are projected to be complete.' +
+        (s.changed && s.changed.length ? '<br><small><b>Changes since the last version:</b> ' + s.changed.slice(0, 10).map(esc).join(' · ') + (s.changed.length > 10 ? ' · …' : '') + '</small>' : '<br><small>No course changes were found.</small>') +
+        (s.issues && s.issues.length ? '<br><small><b>Plan items to look at:</b> ' + s.issues.map(esc).join(' · ') + '</small>' : '') +
+        '<br><a href="' + esc(r.url) + '" target="_blank" rel="noopener">Open the Google Doc →</a></div>';
+    } catch (err) {
+      if (err && err.auth) { bad('<b>Your Google sign-in expired.</b> ' + esc(err.message)); renderAuth(); }
+      else bad('<b>Could not refresh the Doc.</b> ' + esc(err.message || String(err)) + (err && err.nocopy ? '' : ' Make sure you opened the planner with the same Google account that created the Doc, then try again.'));
+    } finally { btn.disabled = false; btn.textContent = 'Refresh a Doc’s tracker…'; }
+  }
+
   async function submit() {
     const P = E.problems(state); const msg = $('#submitMsg'); msg.innerHTML = '';
     if (showSync()) { msg.innerHTML = '<div class="bad"><b>Cannot submit yet:</b> some site files are out of date (' + esc(syncProblems().join(', ')) + '). See the red notice at the top of the page.</div>'; return; }
@@ -580,6 +644,9 @@
     try {
       const logoUrl = new URL('assets/img/wordmark-red.png', location.href).href;
       const data = await WA.google.createPlanDoc(payload, { logoUrl });
+      // a private copy of the plan (in your drafts folder) lets "Refresh tracker from Doc" recalculate this Doc later
+      try { await WA.google.savePlanCopy(data.id, { app: 'WA Course Planner', v: 1, savedAt: new Date().toISOString(), state: JSON.parse(JSON.stringify(state)), chipDefs: payload.chipDefs }, i.studentName.trim() + ' — ' + i.classOf); data.canRefresh = true; }
+      catch (e) { data.warnings = (data.warnings || []).concat(['A private copy of the plan could not be saved, so “Refresh tracker from Doc” will not be available for this Doc (' + (e.message || e) + ').']); }
       msg.innerHTML = '<div class="ok"><b>✓ Course plan created in your Google Drive.</b><br>You own it and can edit it' + (data.shared ? '; ' + esc(i.studentEmail) + ' has view-only access.' : '.') +
         '<br><a href="' + esc(data.url) + '" target="_blank" rel="noopener">Open the Google Doc →</a>' + (data.warnings && data.warnings.length ? '<br><small><b>Please note:</b> ' + esc(data.warnings.join(' ')) + '</small>' : '') + '</div>';
     } catch (err) {
@@ -657,7 +724,7 @@
         if (pick === false || pick === undefined) return; sp = res.plans[pick];
       }
       if (hasPlanWork() && !(await dialog('<h3>Replace the current plan?</h3><p>Importing “' + esc(sp.name) + '” replaces the courses, prior credit and cocurriculars on this page. Student and counselor information stays.</p>', [{ text: 'Cancel', value: false }, { text: 'Import', value: true, primary: true }]))) return;
-      state.plan = sp.plan; state.summer = sp.summer; state.prior = Object.assign(E.emptyState().prior, sp.prior); state.cocurr = sp.cocurr;
+      state.plan = sp.plan; state.summer = sp.summer; state.prior = Object.assign(E.emptyState().prior, sp.prior); state.cocurr = sp.cocurr; state.dist = sp.dist; if (sp.colleges) state.info.colleges = sp.colleges; if (sp.major) state.info.major = sp.major;
       if (sp.classOf) state.info.classOf = sp.classOf;
       if (sp.notes) state.info.notes = (state.info.notes ? state.info.notes.trim() + '\n\n' : '') + 'From the family planner (' + sp.name + '): ' + sp.notes;
       fullRender();
@@ -718,12 +785,13 @@
     $('#saveDraft').addEventListener('click', saveDraft);
     $('#loadDraft').addEventListener('click', openDrafts);
     $('#resetAll').addEventListener('click', reset);
+    $('#refreshBtn').addEventListener('click', refreshDoc);
     $('#importFamily').addEventListener('change', e => { if (e.target.files[0]) importFamilyFile(e.target.files[0]); e.target.value = ''; });
     $('#ovOn').addEventListener('change', e => { state.override.on = e.target.checked; save(); });
     $('#ovReason').addEventListener('input', e => { state.override.reason = e.target.value; save(); });
     ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => $('[data-bind="' + p + '"]').addEventListener('input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
     fullRender(); initAuth(); initNav(); initSound(); showSync();
   }
-  window.WA.app = { celebrate: a => { celQueue.push(a); runCel(); }, chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
+  window.WA.app = { refreshCompute, normState, modelFor, celebrate: a => { celQueue.push(a); runCel(); }, chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
