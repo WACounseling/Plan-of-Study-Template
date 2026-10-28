@@ -159,7 +159,7 @@
   const PA = { fa: true };
   C('bnd1', 'Concert Fundamentals Winds', 'pa', 'EP', 'Y', ALL, Object.assign({ rep: 1, fam: 'band', ap: 'Audition with Director of Bands' }, PA));
   C('bnd2', 'Concert Winds', 'pa', 'EP/HP', 'Y', ALL, Object.assign({ rep: 1, fam: 'band', ap: 'Audition (HP credit with instructor permission)' }, PA));
-  C('bnd3', 'Symphonic Winds', 'pa', 'HP', 'Y', ALL, Object.assign({ rep: 1, fam: 'band', ap: 'Audition with Director of Bands' }, PA));
+  C('bnd3', 'Symphonic Winds', 'pa', 'HP', 'Y', ALL, Object.assign({ rep: 1, fam: 'bnd3', ap: 'Audition with Director of Bands' }, PA));
   C('bndcap', 'Capstone Winds', 'pa', 'HP', 'Y', [12], Object.assign({ soft: 'bnd3', ap: 'Audition; accepted to Symphonic Winds; Administration approval', cap: 'Y' }, PA));
   C('mprod1', 'Introduction to Music Production', 'pa', 'EP', 'F', ALL, PA);
   C('mprod2', 'Advanced Music Production', 'pa', 'HP', 'S', ALL, Object.assign({ pre: 'mprod1', ap: 'Instructor permission' }, PA));
@@ -238,8 +238,8 @@
   C('capyb', 'Capstone Student Publications: Yearbook', 'jr', 'HP', 'Y', [12], { pre: O('photoj', 'yb'), cap: 'Y', ap: 'Application; Administration approval' });
 
   /* ---------------- LEARNING SUPPORT ---------------- */
-  C('ff', 'Freshman Foundations', 'ls', 'CP', 'E', [9], { supp: true, rep: 1, pe: true });
-  C('ss_', 'Study Strategies', 'ls', 'CP', 'E', ALL, { supp: true, rep: 1, pe: true, ap: 'Diagnosed learning differences or Chair permission' });
+  C('ff', 'Freshman Foundations', 'ls', 'CP', 'E', [9], { supp: true, rep: 1 });
+  C('ss_', 'Study Strategies', 'ls', 'CP', 'E', ALL, { supp: true, rep: 1, ap: 'Diagnosed learning differences or Chair permission' });
   C('esol', 'English Speakers of Other Languages (ESOL)', 'ls', 'CP', 'E', [9, 10], { supp: true, rep: 1, ap: 'Director of Global Connections' });
   C('sh', 'Study Hall (no credit)', 'ls', '', 'E', ALL, { nocr: true, rep: 1, hall: true });
   C('rper', 'R Period (no credit)', 'ls', '', 'E', SR, { nocr: true, rep: 1, hall: true, needs: 'peFa', ap: 'Privilege: PE and Fine Arts requirements must be complete' });
@@ -260,7 +260,7 @@
   const LEVEL_RANK = { '': 0, CP: 1, EP: 2, HP: 3, AP: 4 };
 
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['catalog.js'] = '4';
+  (WA.versions = WA.versions || {})['catalog.js'] = '6';
   WA.catalog = { list: D, by: BY, DEPTS, LANGS, CORE, LEVEL_RANK };
   if (typeof module !== 'undefined') module.exports = WA.catalog;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
