@@ -1,803 +1,267 @@
-/* Woodward Academy Four-Year Course Planner — UI */
-(function () {
-  'use strict';
-  const WA = window.WA, E = WA.engine, CAT = WA.catalog, COC = WA.cocurr, REF = WA.reference, DIST = WA.distinctions, DUI = WA.distui;
-  const CFG = window.WA_CONFIG || {};
-  const $ = (s, r) => (r || document).querySelector(s);
-  const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
-  const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-p';
-  // every file must match the version this app.js expects; otherwise some files on the site are stale
-  const EXPECT = { 'catalog.js': '6', 'cocurriculars.js': '1', 'engine.js': '4', 'reference.js': '4', 'distinctions.js': '3', 'planio.js': '4', 'combo.js': '1', 'distui.js': '2', 'sound.js': '1', 'docbuilder.js': '13', 'google.js': '13' };
-  const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft', 'savePlanCopy', 'listPlanDocs', 'refreshFromDoc'];
-  function syncProblems() {
-    const v = WA.versions || {}, bad = Object.keys(EXPECT).filter(f => v[f] !== EXPECT[f]);
-    if (!bad.includes('google.js') && NEEDS.some(f => typeof (WA.google || {})[f] !== 'function')) bad.push('google.js');
-    return bad;
-  }
-  function showSync() {
-    const bad = syncProblems(); let el = document.getElementById('syncwarn');
-    if (!bad.length) { if (el) el.remove(); return false; }
-    if (!el) { el = document.createElement('div'); el.id = 'syncwarn'; el.className = 'syncwarn'; el.setAttribute('role', 'alert'); document.body.insertBefore(el, document.body.firstChild); }
-    el.innerHTML = '<b>Some site files are out of date or did not load:</b> ' + bad.map(esc).join(', ') + '. Upload the latest version of these files to GitHub (use the same batch as the newest <code>app.js</code>), wait a minute, then hard-refresh this page (Ctrl+Shift+R).';
-    return true;
-  }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four-Year Course Planner · Woodward Academy Upper School Counseling</title>
+<meta name="description" content="Counselor tool for building a four-year Upper School course plan that meets Woodward Academy and State of Georgia graduation requirements.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%239d2235'/%3E%3Ctext x='32' y='43' font-family='Georgia,serif' font-size='30' font-weight='700' fill='white' text-anchor='middle'%3EWA%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css?v=o">
+</head>
+<body>
+<a class="skip" href="#main">Skip to planner</a>
 
-  function h(tag, attrs) {
-    const el = document.createElement(tag);
-    Object.keys(attrs || {}).forEach(k => {
-      const v = attrs[k];
-      if (k === 'class') el.className = v; else if (k === 'text') el.textContent = v; else if (k === 'html') el.innerHTML = v;
-      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else if (v !== false && v != null) el.setAttribute(k, v === true ? '' : v);
-    });
-    for (let i = 2; i < arguments.length; i++) { const c = arguments[i]; if (c == null) continue; el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); }
-    return el;
-  }
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+<header class="site-head">
+  <div class="wrap head-in">
+    <img class="wordmark" src="assets/img/wordmark-red.png" alt="Woodward Academy">
+    <div class="head-text">
+      <p class="eyebrow">Upper School Counseling</p>
+      <h1>Four-Year Course Planner</h1>
+    </div>
+    <p class="motto">Excellence. Character. Opportunity.</p>
+  </div>
+  <div class="head-bar"></div>
+</header>
 
-  /* ---------------- state ---------------- */
-  let state = E.emptyState();
-  let prevMet = null;
-  const selRefs = {};   // selRefs[g][slot][half] -> <select>
-  const noteRefs = {};  // noteRefs[g][slot] -> <div>
-  const chipRefs = {};
+<div class="layout">
+<nav class="sidenav" id="sidenav" aria-label="Planner sections">
+  <div class="sn-student" id="snStudent"><span class="sn-name" id="snName">New course plan</span><span class="sn-grad" id="snGrad"></span></div>
+  <ol class="sn-list">
+    <li><a href="#s-info" data-spy="s-info"><span class="sn-num">1</span><span class="sn-text">Student &amp; Counselor</span><span class="sn-dot s-none" data-dot="info"></span></a></li>
+    <li><a href="#s-prior" data-spy="s-prior"><span class="sn-num">2</span><span class="sn-text">Prior Credit &amp; Placement</span><span class="sn-dot s-none" data-dot="prior"></span></a></li>
+    <li class="has-sub"><a href="#s-grades" data-spy="s-grades"><span class="sn-num">3</span><span class="sn-text">Four-Year Plan</span><span class="sn-dot s-none" data-dot="grades"></span></a>
+      <ul class="sn-sub">
+        <li><a href="#grade-9" data-spy="grade-9"><span class="sn-text">9th Grade</span><span class="sn-dot s-none" data-dot="g9"></span></a></li>
+        <li><a href="#grade-10" data-spy="grade-10"><span class="sn-text">10th Grade</span><span class="sn-dot s-none" data-dot="g10"></span></a></li>
+        <li><a href="#grade-11" data-spy="grade-11"><span class="sn-text">11th Grade</span><span class="sn-dot s-none" data-dot="g11"></span></a></li>
+        <li><a href="#grade-12" data-spy="grade-12"><span class="sn-text">12th Grade</span><span class="sn-dot s-none" data-dot="g12"></span></a></li>
+      </ul></li>
+    <li><a href="#s-cocurr" data-spy="s-cocurr"><span class="sn-num">4</span><span class="sn-text">Cocurricular Activities</span><span class="sn-dot s-none" data-dot="coc"></span></a></li>
+    <li><a href="#s-college" data-spy="s-college"><span class="sn-num">✎</span><span class="sn-text">College &amp; Career Interests</span><span class="sn-dot s-none" data-dot="college"></span></a></li>
+    <li><a href="#s-notes" data-spy="s-notes"><span class="sn-num">+</span><span class="sn-text">Counselor Notes</span><span class="sn-dot s-none" data-dot="notes"></span></a></li>
+    <li><a href="#s-tracker" data-spy="s-tracker"><span class="sn-num">✓</span><span class="sn-text">Credit Tracker</span><span class="sn-badge" id="snTrk">0/10</span></a></li>
+    <li><a href="#s-dist" data-spy="s-dist"><span class="sn-num">★</span><span class="sn-text">Graduation Distinctions</span><span class="sn-dot s-none" data-dot="dist"></span></a></li>
+    <li><a href="#s-ref" data-spy="s-ref"><span class="sn-num">i</span><span class="sn-text">Graduation Reference</span></a></li>
+    <li><a href="#s-submit" data-spy="s-submit"><span class="sn-num">5</span><span class="sn-text">Review &amp; Submit</span><span class="sn-dot s-none" data-dot="submit"></span></a></li>
+  </ol>
+  <div class="sn-key" aria-hidden="true"><span class="sn-dot s-done"></span> done <span class="sn-dot s-part"></span> needs attention <span class="sn-dot s-err"></span> fix <span class="sn-dot s-none"></span> not started</div>
+</nav>
+<main id="main">
+  <p class="lede">Build a plan for grades 9–12 that meets Woodward Academy and State of Georgia graduation requirements. Dropdowns update as courses are chosen, based on the prerequisites in the <em>2026–2027 Scheduling &amp; Curriculum Guide</em>.</p>
 
-  function load() {
-    try { const raw = sessionStorage.getItem(SKEY); if (raw) mergeState(JSON.parse(raw)); } catch (e) { /* ignore */ }
-  }
-  function normState(o) {
-    const base = E.emptyState();
-    const st = {
-      info: Object.assign(base.info, o.info || {}), prior: Object.assign(base.prior, o.prior || {}),
-      plan: base.plan, summer: base.summer, cocurr: Array.isArray(o.cocurr) ? o.cocurr : [], dist: WA.planio.sanitizeDist(o.dist), override: Object.assign(base.override, o.override || {})
-    };
-    E.GRADES.forEach(g => {
-      E.ALL_SLOTS.forEach(s => { const c = o.plan && o.plan[g] && o.plan[g][s.k]; if (c) st.plan[g][s.k] = { f: c.f || '', s: c.s || '' }; });
-      E.SUMMER_SLOTS.forEach(s => { const c = o.summer && o.summer[g] && o.summer[g][s.k]; if (c) st.summer[g][s.k] = c; });
-    });
-    if (!Array.isArray(st.prior.transfers)) st.prior.transfers = [];
-    return st;
-  }
-  function mergeState(o) { state = normState(o); }
+  <!-- STEP 1 -->
+  <section class="card" id="s-info" aria-labelledby="h-info">
+    <h2 id="h-info"><span class="step">1</span>Student &amp; Counselor</h2>
+    <div class="grid g3">
+      <label>Student name <span class="req">*</span><input type="text" data-bind="info.studentName" autocomplete="off"></label>
+      <label>Student email <span class="req">*</span><input type="email" data-bind="info.studentEmail" autocomplete="off" placeholder="name@woodward.edu"></label>
+      <label>Projected graduation year <span class="req">*</span>
+        <select data-bind="info.classOf"><option value="">— select —</option></select><small>Used to label each grade’s school year and printed on the plan.</small></label>
+      <label>Counselor name <span class="req">*</span><input type="text" data-bind="info.counselorName" autocomplete="off"><small>Filled from your Google account; you may edit it.</small></label>
+      <label>Counselor email <span class="req">*</span><input type="email" data-bind="info.counselorEmail" readonly placeholder="Filled in when you sign in"><small>Taken from your Google sign-in.</small></label>
+      <label>Date <span class="req">*</span><input type="date" data-bind="info.date"></label>
+    </div>
+    <div class="signin" id="signin">
+      <div id="signinOut">
+        <button type="button" class="btn primary" id="gsiBtn"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#fff" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#fff" opacity=".85" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#fff" opacity=".7" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#fff" opacity=".55" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Sign in with Google</button>
+        <small>Required. Sign in with your <b>@woodward.edu</b> account. The plan is created in <b>your</b> Google Drive and you are its owner.</small>
+      </div>
+      <div id="signinIn" hidden><span class="ok-dot"></span> Signed in as <b id="siName"></b> (<span id="siEmail"></span>) <button type="button" class="btn link" id="signOutBtn">Sign out</button></div>
+      <div id="signinErr" class="signin-err" role="alert" hidden></div>
+    </div>
+    <div class="import-box">
+      <b>Have a plan file from the Student &amp; Family Planner?</b>
+      <label class="btn ghost filebtn">Import a student’s plan file…<input type="file" id="importFamily" accept=".json,application/json" hidden></label>
+      <small>Fills in the courses, prior credit and cocurriculars from the file. Family files are anonymous — you then add the student’s name and email below.</small>
+      <div id="importMsg" role="status" aria-live="polite"></div>
+    </div>
+  </section>
 
-  let saveT;
-  function save() {
-    clearTimeout(saveT);
-    saveT = setTimeout(() => { try { const c = JSON.parse(JSON.stringify(state)); sessionStorage.setItem(SKEY, JSON.stringify(c)); } catch (e) { /* ignore */ } }, 250);
-  }
+  <!-- STEP 2 -->
+  <section class="card" id="s-prior" aria-labelledby="h-prior">
+    <h2 id="h-prior"><span class="step">2</span>Prior Credit &amp; Placement</h2>
+    <p class="help">Enter credit and placement the student brings into the Upper School. These feed the prerequisite checks and the credit tracker below. Middle School course names follow the <em>Middle School Scheduling &amp; Curriculum Guide 2026–2027</em>.</p>
 
-  /* ---------------- simple bindings (Step 1 & 2) ---------------- */
-  const getPath = p => p.split('.').reduce((o, k) => (o == null ? o : o[k]), state);
-  function setPath(p, v) { const ks = p.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], state)[last] = v; }
-  function initBindings() {
-    const sel = $('select[data-bind="info.classOf"]');
-    for (let y = 2026; y <= 2032; y++) sel.appendChild(h('option', { value: y, text: 'Spring ' + y + ' (Class of ' + y + ')' }));
-    $$('[data-bind]').forEach(el => {
-      const p = el.dataset.bind;
-      const v = getPath(p);
-      if (el.type === 'checkbox') el.checked = !!v; else el.value = v == null ? '' : v;
-      el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => {
-        let val = el.type === 'checkbox' ? el.checked : el.value;
-        if (p === 'prior.psCredit') val = +val;
-        setPath(p, val);
-        if (p === 'info.classOf') labelGrades();
-        if (p.startsWith('prior.')) update(true); else { renderReadiness(E.problems(state)); save(); }
-      });
-    });
-  }
+    <h3>From Woodward Middle School</h3>
+    <div class="grid g2">
+      <label>Physical Science (8th grade)
+        <select data-bind="prior.psCredit">
+          <option value="0">Not completed / not at WA Middle School</option>
+          <option value="0.5">Fall semester completed (½ unit)</option>
+          <option value="1">Both semesters completed (1 unit)</option>
+        </select>
+        <small>Earns ½ unit of Upper School <b>science credit</b> per semester (grade D or higher; shown as “P”, not in GPA).</small></label>
+      <label>Math completed in Middle School
+        <select data-bind="prior.msMath">
+          <option value="none">Pre-Algebra / Fundamentals of Algebra (Transition) — start Algebra 1 in 9th</option>
+          <option value="alg1">Algebra 1 (CP / EP)</option>
+          <option value="alg1hp">Algebra 1 (HP)</option>
+          <option value="geohp">Algebra 1 (HP) + Geometry (HP)</option>
+        </select>
+        <small>Middle School math earns no Upper School credit, but 4 consecutive math units are still required in grades 9–12.</small></label>
+      <label>World Language completed in Middle School <span class="muted">(including Upper School language classes)</span>
+        <select data-bind="prior.msLang">
+          <option value="">None / new to the language</option>
+          <optgroup label="French">
+            <option value="fr:1">Level 1 complete — MS 7EP+8EP, 8HP or 1HP, or Upper School French 1 → start at French 2</option>
+            <option value="fr:2">Levels 1–2 complete — MS 2HP (from 2027–28) or Upper School French 2 → start at French 3</option>
+            <option value="fr:3">Levels 1–3 complete — Upper School French 3 → start at French 4</option>
+            <option value="fr:4">Levels 1–4 complete — Upper School French 4 → start at French 5 / AP</option>
+          </optgroup>
+          <optgroup label="Spanish">
+            <option value="sp:1">Level 1 complete — MS 7EP+8EP, 8HP or 1HP, or Upper School Spanish 1 → start at Spanish 2</option>
+            <option value="sp:2">Levels 1–2 complete — MS 2HP (from 2027–28) or Upper School Spanish 2 → start at Spanish 3</option>
+            <option value="sp:3">Levels 1–3 complete — Upper School Spanish 3 → start at Spanish 4</option>
+            <option value="sp:4">Levels 1–4 complete — Upper School Spanish 4 → start at Spanish 5 / AP</option>
+          </optgroup>
+          <optgroup label="German">
+            <option value="de:1">Level 1 complete — Upper School German 1 → start at German 2</option>
+            <option value="de:2">Levels 1–2 complete — Upper School German 2 → start at German 3</option>
+            <option value="de:3">Levels 1–3 complete — Upper School German 3 → start at German 4</option>
+            <option value="de:4">Levels 1–4 complete — Upper School German 4 → start at German 5 / AP</option>
+          </optgroup>
+          <optgroup label="Japanese">
+            <option value="ja:1">Level 1 complete — Upper School Japanese 1 → start at Japanese 2</option>
+            <option value="ja:2">Levels 1–2 complete — Upper School Japanese 2 → start at Japanese 3</option>
+            <option value="ja:3">Levels 1–3 complete — Upper School Japanese 3 → start at Japanese 4 / AP</option>
+            <option value="ja:4">Levels 1–4 complete — Upper School Japanese 4 → AP Japanese</option>
+          </optgroup>
+          <optgroup label="Mandarin Chinese">
+            <option value="zh:1">Level 1 complete — Upper School Chinese 1 → start at Chinese 2</option>
+            <option value="zh:2">Levels 1–2 complete — Upper School Chinese 2 → start at Chinese 3</option>
+            <option value="zh:3">Levels 1–3 complete — Upper School Chinese 3 → start at Chinese 4 / AP</option>
+            <option value="zh:4">Levels 1–4 complete — Upper School Chinese 4 → AP Chinese</option>
+          </optgroup>
+        </select>
+        <small>Language classes taken in Middle School earn no graduation credit by themselves — this just unlocks the next level. Two consecutive Upper School years are still required. If Woodward awarded Upper School credit for a class taken in Middle School, also add it under Transfer credit (Completed: Middle School).</small></label>
+      <div class="checks">
+        <label class="chk"><input type="checkbox" data-bind="prior.civics8"> Completed <b>Government &amp; Economics (HP)</b> in WA 8th grade<small>Gov/Econ is waived, Modern World History may start in 9th; 3 social studies units are still required.</small></label>
+        <label class="chk"><input type="checkbox" data-bind="prior.placement"> Language <b>placement test</b> / heritage speaker<small>Allows starting a language above Level 1 without the prior level.</small></label>
+      </div>
+    </div>
 
-  /* ---------------- grade cards ---------------- */
-  const ORD = { 9: '9th', 10: '10th', 11: '11th', 12: '12th' };
-  function yearLabel(g) { const c = +state.info.classOf; if (!c) return ''; const s = c - 13 + g; return s + '–' + String(s + 1).slice(2); }
-  function gradText() { return state.info.classOf ? 'Projected graduation: Spring ' + state.info.classOf : ''; }
-  function labelGrades() { ['gradBadge1', 'gradBadge2', 'sbGrad'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = id === 'sbGrad' ? (state.info.classOf ? 'Graduating Spring ' + state.info.classOf : '') : gradText(); });
-    E.GRADES.forEach(g => { const y = chipRefs[g] && chipRefs[g].yr; if (y) y.textContent = yearLabel(g) ? '· ' + yearLabel(g) : ''; }); }
+    <h3>Transfer credit <span class="muted">(coursework from another school in grades 9–12, including approved summer forward credit)</span></h3>
+    <div id="transferRows" class="tr-rows"></div>
+    <button type="button" class="btn ghost" id="addTransfer">+ Add transfer credit</button>
+    <p class="help small">If the course matches a Woodward course, choose it so prerequisites are satisfied (for example Biology or Algebra 2). Otherwise pick a subject area and enter credits. Transfer work appears as TR- on the transcript and is not included in WA GPAs.</p>
+  </section>
 
-  function buildGrades() {
-    const host = $('#grades'); host.innerHTML = '';
-    E.GRADES.forEach(g => {
-      selRefs[g] = {}; noteRefs[g] = {}; chipRefs[g] = {};
-      const yr = h('span', { class: 'yr' }), chips = h('div', { class: 'chips' });
-      chipRefs[g].yr = yr; chipRefs[g].chips = chips;
-      const body = h('div', { class: 'grade-body' });
-      const rowFor = (slot, label, summer) => {
-        selRefs[g][slot.k] = {};
-        const mk = half => {
-          const sel = h('select', { 'data-cb': '1', 'aria-label': ORD[g] + ' grade ' + label + (summer ? '' : half ? ' spring' : ' fall or full year') });
-          sel.addEventListener('change', () => onPick(g, slot.k, half, sel.value, !!summer));
-          selRefs[g][slot.k][half] = sel; return sel;
-        };
-        const notes = h('div', { class: 'notes' }); noteRefs[g][slot.k] = notes;
-        if (summer) return h('div', { class: 'row' }, h('div', { class: 'lab', text: label }), h('div', { class: 'col' }, h('label', { text: 'Summer semester course' }), mk(0)), h('div', {}), notes);
-        return h('div', { class: 'row' }, h('div', { class: 'lab', text: label }),
-          h('div', { class: 'col' }, h('label', { text: 'Fall / Full year' }), mk(0)),
-          h('div', { class: 'col' }, h('label', { text: 'Spring' }), mk(1)), notes);
-      };
-      body.appendChild(h('div', { class: 'sec-title', text: 'Academic — core disciplines' }));
-      E.CORE_SLOTS.forEach(s => body.appendChild(rowFor(s, s.label)));
-      body.appendChild(h('div', { class: 'sec-title', text: 'Electives' }));
-      E.ELEC_SLOTS.forEach(s => body.appendChild(rowFor(s, s.label)));
-      if (g < 12) {
-        body.appendChild(h('div', { class: 'sec-title', text: 'Summer after ' + ORD[g] + ' grade (optional forward credit)' }));
-        E.SUMMER_SLOTS.forEach(s => body.appendChild(rowFor(s, s.label, true)));
-      }
-      const lm = h('div', { class: 'loadmsgs' }); chipRefs[g].msgs = lm; body.appendChild(lm);
-      host.appendChild(h('article', { class: 'grade', id: 'grade-' + g }, h('div', { class: 'grade-head' }, h('h3', { text: ORD[g] + ' Grade' }), yr, chips), body));
-    });
-    labelGrades();
-  }
+  <!-- STEP 3 -->
+  <section id="s-grades" aria-labelledby="h-grades">
+    <h2 class="plain" id="h-grades"><span class="step">3</span>Four-Year Plan <span class="gradbadge" id="gradBadge1"></span></h2>
+    <p class="help">Year-long courses are chosen in the <b>Fall / Full Year</b> dropdown and automatically fill both semesters. For semester courses, choose a Fall course and a Spring course. Items marked <b>⚑ approval</b> are available but need department chair / instructor approval. Courses whose prerequisites are not yet met appear greyed out at the end of each list with the reason.</p>
+    <div id="grades"></div>
+  </section>
 
-  function onPick(g, slot, half, val, summer) {
-    if (summer) { state.summer[g][slot] = val; }
-    else {
-      const cell = state.plan[g][slot];
-      if (half === 0) {
-        cell.f = val; const p = E.parseSel(val);
-        if (p && p.c.t === 'Y') cell.s = '';
-      } else cell.s = val;
-    }
-    update(true);
-  }
+  <!-- STEP 4 -->
+  <section class="card" id="s-cocurr" aria-labelledby="h-coc">
+    <h2 id="h-coc"><span class="step">4</span>Cocurricular Activities</h2>
+    <p class="help">Record the clubs, teams, arts groups and service programs the student is involved in now, or would like to explore in the future (from the <em>Upper School Cocurricular Guide</em>).</p>
+    <div id="cocRows" class="coc-rows"></div>
+    <button type="button" class="btn ghost" id="addCoc">+ Add activity</button>
+  </section>
 
-  /* ---------------- select filling ---------------- */
-  function fillSelect(sel, opts, value, placeholder, cls) {
-    const items = opts.groups.flatMap(g => g.items);
-    const have = new Set(items.map(i => i.value));
-    const sig = placeholder + '|' + items.map(i => i.value + i.state).join(',') + '|' + opts.locked.map(i => i.value).join(',') + '|' + (value && !have.has(value) ? value : '');
-    if (sel.dataset.sig !== sig) {
-      sel.innerHTML = '';
-      sel.appendChild(h('option', { value: '', text: placeholder }));
-      if (value && !have.has(value)) {
-        const p = E.parseSel(value);
-        if (p) sel.appendChild(h('option', { value, text: '⚠ ' + E.courseLabel(p.c, p.lv) + ' — check prerequisites / availability' }));
-      }
-      opts.groups.forEach(g => {
-        const og = h('optgroup', { label: g.group });
-        g.items.forEach(i => og.appendChild(h('option', { value: i.value, text: i.label, class: i.state === 'approval' ? 'appr' : '' })));
-        sel.appendChild(og);
-      });
-      if (opts.locked.length) {
-        const og = h('optgroup', { label: 'Not yet available — prerequisite needed' });
-        opts.locked.forEach(i => og.appendChild(h('option', { value: i.value, disabled: true, text: i.label + ' — ' + i.reason })));
-        sel.appendChild(og);
-      }
-      sel.dataset.sig = sig;
-    }
-    sel.value = value || '';
-    sel.classList.toggle('filled', !!value);
-    ['err', 'warn'].forEach(c => sel.classList.toggle(c, cls === c));
-  }
+  <section class="card" id="s-college" aria-labelledby="h-college">
+    <h2 id="h-college"><span class="step">✎</span>College &amp; Career Interests <span class="muted">(optional)</span></h2>
+    <p class="help">Two open questions to help guide the conversation. The responses are printed on page 2 of the Google Doc.</p>
+    <div class="grid g2">
+      <label>Is the student interested in any specific colleges or universities? If so, which ones?
+        <textarea data-bind="info.colleges" aria-label="Colleges or universities of interest (optional)" rows="3" maxlength="240" placeholder="For example: Georgia Tech, Emory, UGA…"></textarea></label>
+      <label>Does the student have a particular major or path of study in mind? If so, what is it?
+        <textarea data-bind="info.major" aria-label="Major or path of study in mind (optional)" rows="3" maxlength="240" placeholder="For example: engineering, nursing, business, undecided…"></textarea></label>
+    </div>
+    <small>Free responses, up to 240 characters each.</small>
+  </section>
 
-  /* ---------------- master update ---------------- */
-  function update(userAction) {
-    const val = E.validateSelections(state);
-    E.GRADES.forEach(g => {
-      const cellsFor = (slot, summer) => {
-        const cell = summer ? { f: state.summer[g][slot.k], s: '' } : state.plan[g][slot.k];
-        const f = E.parseSel(cell.f);
-        const selF = selRefs[g][slot.k][0];
-        fillSelect(selF, E.optionsFor(state, g, slot.k, 0), cell.f, summer ? '— none —' : slot.dept ? '— none —' : '— open period —',
-          stClass(val[g + '|' + slot.k + '|f']));
-        if (!summer) {
-          const selS = selRefs[g][slot.k][1];
-          if (f && f.c.t === 'Y') {
-            selS.innerHTML = ''; selS.appendChild(h('option', { value: '', text: 'Year-long course' })); selS.dataset.sig = 'Y'; selS.disabled = true; selS.classList.remove('filled', 'err', 'warn');
-          } else {
-            selS.disabled = false;
-            fillSelect(selS, E.optionsFor(state, g, slot.k, 1), cell.s, '— none —', stClass(val[g + '|' + slot.k + '|s']));
-          }
-        }
-        // notes
-        const box = noteRefs[g][slot.k]; box.innerHTML = '';
-        ['f', 's'].forEach(w => {
-          const v = val[g + '|' + slot.k + '|' + w]; if (!v) return;
-          const pfx = summer ? '' : (w === 'f' ? (f && f.c.t === 'Y' ? '' : 'Fall: ') : 'Spring: ');
-          if (v.state === 'blocked') box.appendChild(h('div', { class: 'e', text: '⛔ ' + pfx + v.course + ' — prerequisite not met. ' + v.blockedReason + '.' }));
-          (v.approvals || []).forEach(a => box.appendChild(h('div', { class: 'w', text: '⚑ ' + pfx + v.course + ': ' + a })));
-          (v.msgs || []).forEach(a => box.appendChild(h('div', { class: 'i', text: 'ⓘ ' + pfx + v.course + ': ' + a })));
-        });
-        box.style.display = box.children.length ? '' : 'none';
-      };
-      E.CORE_SLOTS.forEach(s => cellsFor(s, false));
-      E.ELEC_SLOTS.forEach(s => cellsFor(Object.assign({ dept: '' }, s), false));
-      if (g < 12) E.SUMMER_SLOTS.forEach(s => cellsFor(s, true));
-    });
-    const P = E.problems(state);
-    renderChips(P);
-    renderTracker(P.tracker);
-    const D = DIST.evaluate(E.allTaken(state), state.dist); renderDist(D);
-    renderReadiness(P);
-    if (userAction) celebrateDiff(P.tracker, D); else prevMet = metSet(P.tracker, D);
-    if (WA.combo) WA.combo.refreshAll();
-    save();
-  }
-  const stClass = v => (!v ? '' : v.state === 'blocked' ? 'err' : v.state === 'approval' ? 'warn' : '');
-  const metSet = (t, D) => new Set(t.areas.filter(a => a.met).map(a => a.key).concat((D || []).filter(x => x.interested && x.met).map(x => 'dist:' + x.id)));
-  /* ---------------- graduation distinctions ---------------- */
-  const onInterest = (id, on) => { if (on) state.dist.interest[id] = true; else delete state.dist.interest[id]; update(false); };
-  function renderDist(D) {
-    DUI.render($('#distTrack'), D, onInterest);
-    const want = D.filter(x => x.interested); setDot('dist', !want.length ? 'none' : want.every(x => x.met) ? 'done' : 'part', !want.length ? 'Optional — none chosen' : want.every(x => x.met) ? 'All chosen distinctions complete' : 'In progress');
-  }
+  <section class="card" id="s-notes">
+    <h2 class="plain-h"><span class="step">+</span>Counselor Notes <span class="muted">(optional — included in the Google Doc)</span></h2>
+    <textarea data-bind="info.notes" aria-label="Counselor notes (optional)" rows="3" placeholder="Goals, scholarship or NCAA plans, accommodations, follow-ups…"></textarea>
+  </section>
 
-  function renderChips(P) {
-    E.GRADES.forEach(g => {
-      const chips = chipRefs[g].chips; chips.innerHTML = '';
-      const list = P.load[g]; const errs = list.filter(x => x.lvl === 'error').length, warns = list.filter(x => x.lvl === 'warn').length;
-      const hasSel = E.ALL_SLOTS.some(s => state.plan[g][s.k].f || state.plan[g][s.k].s);
-      const blocked = Object.values(P.validation).filter(v => v.grade === g && v.state === 'blocked').length;
-      chips.appendChild(h('span', { class: 'chip', text: 'Cumulative ' + P.tracker.cum[g] + ' units' }));
-      if (hasSel) {
-        if (errs + blocked) chips.appendChild(h('span', { class: 'chip err', text: (errs + blocked) + ' to fix' }));
-        else chips.appendChild(h('span', { class: 'chip ok', text: 'Load OK' }));
-        if (warns) chips.appendChild(h('span', { class: 'chip warn', text: warns + ' approval note' + (warns > 1 ? 's' : '') }));
-      }
-      const lm = chipRefs[g].msgs; lm.innerHTML = '';
-      list.forEach(x => lm.appendChild(h('div', { class: x.lvl, text: (x.lvl === 'error' ? '⛔ ' : '⚑ ') + x.text })));
-    });
-  }
+  <!-- TRACKER -->
+  <section class="card tracker" id="s-tracker" aria-labelledby="h-track">
+    <h2 id="h-track"><span class="step">✓</span>Credit Tracker <span class="gradbadge" id="gradBadge2"></span></h2>
+    <div class="legend" aria-hidden="true"><span class="dot done"></span>Complete <span class="dot part"></span>In progress <span class="dot none"></span>Not started</div>
+    <div id="trackerAreas" class="areas" aria-live="polite"></div>
+    <h3>Credits by grade <span class="muted">(GHSA / GISA checkpoints: 5 · 11 · 17 units)</span></h3>
+    <div id="trackerGrades" class="byg"></div>
+    <h3>Scholarship &amp; eligibility watch</h3>
+    <div id="trackerSchol" class="schol"></div>
+  </section>
 
-  /* ---------------- tracker ---------------- */
-  const STX = { done: 'Complete', part: 'In progress', none: 'Not started' };
-  function renderTracker(t) {
-    const host = $('#trackerAreas'); host.innerHTML = '';
-    t.areas.forEach(a => {
-      const el = h('div', { class: 'area ' + a.status + (a.key === 'total' ? ' total' : ''), id: 'area-' + a.key },
-        h('div', { class: 'area-top' }, h('span', { class: 'nm', text: a.label }), h('span', { class: 'st', text: (a.status === 'done' ? '✓ ' : a.status === 'part' ? '◐ ' : '○ ') + STX[a.status] })),
-        h('div', { class: 'num' }, fmt(a.have), h('span', { text: ' / ' + fmt(a.req) + ' units' })),
-        h('div', { class: 'bar', role: 'progressbar', 'aria-valuenow': a.pct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': a.label + ' credits' }, h('i', { style: 'width:' + a.pct + '%' })),
-        h('div', { class: 'det', text: a.detail }));
-      if (a.subs && a.subs.length) { const s = h('div', { class: 'subs' }); a.subs.forEach(([n, ok]) => s.appendChild(h('span', { class: 'sub ' + (ok ? 'y' : 'n'), text: (ok ? '✓ ' : '○ ') + n }))); el.appendChild(s); }
-      host.appendChild(el);
-    });
-    const g = $('#trackerGrades'); g.innerHTML = '';
-    t.ghsa.concat([{ grade: 12, need: 22, have: t.cum[12], met: t.cum[12] >= 22 }]).forEach(x => {
-      const st = x.met ? 'done' : x.have > 0 ? 'part' : 'none';
-      g.appendChild(h('div', { class: 'mini ' + st }, h('div', { html: 'By end of <b>' + ORD[x.grade] + ' grade</b>' }), h('div', { class: 'big', text: fmt(x.have) + ' / ' + x.need }), h('small', { text: x.met ? '✓ checkpoint met' : 'units needed: ' + fmt(Math.max(0, x.need - x.have)) })));
-    });
-    const s = $('#trackerSchol'); s.innerHTML = '';
-    const r = t.rigor, n = t.ncaa;
-    s.appendChild(h('div', { class: 'mini ' + (r.met ? 'done' : r.have ? 'part' : 'none') }, h('div', { html: '<b>HOPE / Zell Miller rigor courses</b>' }), h('div', { class: 'big', text: r.have + ' / ' + r.need }), h('small', { text: 'Rigor-list courses planned (4 needed). Also requires a 3.0 HOPE GPA (Zell: 3.7 + test score).' })));
-    s.appendChild(h('div', { class: 'mini ' + (n.met ? 'done' : n.total ? 'part' : 'none') }, h('div', { html: '<b>NCAA Division I core courses</b>' }), h('div', { class: 'big', text: fmt(n.total) + ' / 16' }),
-      h('small', { text: n.parts.map(p => p[0] + ' ' + fmt(p[1]) + '/' + p[2]).join(' · ') })));
-    const sb = t.areas.find(a => a.key === 'total');
-    $('#sbTotal').textContent = fmt(Math.min(22, sb.raw || 0)) + ' / 22'; $('#sbFill').style.width = Math.min(100, (sb.raw || 0) / 22 * 100) + '%';
-    $('#sbFill').classList.toggle('full', (sb.raw || 0) >= 22);
-    const doneN = t.areas.filter(a => a.met).length; $('#sbReq').textContent = doneN + ' of ' + t.areas.length;
-  }
-  const fmt = n => (Math.round(n * 100) / 100).toString();
-
-  /* ---------------- celebration ---------------- */
-  const STAR = '<svg viewBox="0 0 24 24"><path d="M12 1.5l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.2 5.7 20.9l1.5-7.1L1.8 8.9 9 8.1z" fill="%C" stroke="#fff" stroke-width="1"/></svg>';
-  const CAP = '<svg class="cap" viewBox="0 0 96 76" aria-hidden="true"><polygon points="48,6 94,26 48,46 2,26" fill="#002e53"/><path d="M22 38v16c0 7 12 14 26 14s26-7 26-14V38L48 50z" fill="#4c768e"/><path d="M84 29v28" stroke="#f4a72a" stroke-width="3.5" stroke-linecap="round"/><circle cx="84" cy="61" r="5.5" fill="#f4a72a"/><polygon points="48,6 94,26 48,46 2,26" fill="none" stroke="#fff" stroke-width="1.2" opacity=".5"/></svg>';
-  const celQueue = []; let celBusy = false;
-  function celebrateDiff(t, D) {
-    const now = metSet(t, D);
-    if (prevMet) {
-      t.areas.forEach(a => { if (a.met && !prevMet.has(a.key)) celQueue.push(a); });
-      (D || []).forEach(x => { if (x.interested && x.met && !prevMet.has('dist:' + x.id)) celQueue.push({ key: 'dist:' + x.id, label: 'Distinction in ' + x.name, dist: true }); });
-    }
-    prevMet = now; runCel();
-  }
-  function runCel() {
-    if (celBusy || !celQueue.length) return;
-    celBusy = true;
-    const a = celQueue.shift(), _snd = WA.sound && WA.sound.play(a.key === 'total' ? 'finale' : 'musicbox');
-    const host = $('#celebrate'); host.innerHTML = ''; host.classList.add('on');
-    const colors = ['#f4a72a', '#9d2235', '#47a972', '#6fccdd', '#ffc513', '#df6460', '#002e53'];
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const card = h('div', { class: 'cel-card' }, h('div', { class: 'icons' }, h('img', { src: 'assets/img/wa-icon.png', alt: '' }), h('span', { html: CAP })),
-      h('h4', { text: a.dist ? a.label + '!' : a.key === 'total' ? 'All 22 units planned!' : a.label + ' complete!' }), h('p', { text: a.dist ? 'Distinction courses planned' : a.key === 'total' ? 'Ready to graduate' : 'Graduation requirement met' }));
-    host.appendChild(card);
-    if (!reduce) for (let i = 0; i < 30; i++) {
-      const ang = (i / 30) * Math.PI * 2 + Math.random() * 0.4, dist = 150 + Math.random() * 190;
-      const st = h('span', { class: 'star', html: STAR.replace('%C', colors[i % colors.length]) });
-      st.style.setProperty('--dx', Math.round(Math.cos(ang) * dist) + 'px'); st.style.setProperty('--dy', Math.round(Math.sin(ang) * dist) + 'px');
-      st.style.setProperty('--r', Math.round(Math.random() * 360 - 180) + 'deg'); st.style.setProperty('--s', (0.7 + Math.random() * 1.1).toFixed(2));
-      st.style.setProperty('--d', (Math.random() * 0.25).toFixed(2) + 's'); host.appendChild(st);
-    }
-    host.setAttribute('aria-hidden', 'false'); host.setAttribute('role', 'status');
-    setTimeout(() => { host.classList.remove('on'); host.innerHTML = ''; host.setAttribute('aria-hidden', 'true'); celBusy = false; setTimeout(runCel, 120); }, reduce ? 1800 : 2700);
-  }
-
-  /* ---------------- transfer credit rows ---------------- */
-  const AREAS = [['eng', 'English'], ['math', 'Mathematics'], ['ss', 'Social Studies'], ['sci', 'Science'], ['wl', 'World Language'], ['pe', 'Physical Education'], ['fa', 'Fine Arts'], ['elec', 'Elective']];
-  const WHEN = [['8', 'Middle School (before 9th)'], ['9', 'Grade 9'], ['10', 'Grade 10'], ['11', 'Grade 11'], ['12', 'Grade 12'], ['s9', 'Summer after 9th'], ['s10', 'Summer after 10th'], ['s11', 'Summer after 11th']];
-  let equivHTML = null;
-  function equivOptions() {
-    if (equivHTML) return equivHTML;
-    let o = '<option value="">— No Woodward equivalent (enter subject area) —</option>';
-    const order = ['eng', 'math', 'ss', 'sci', 'wl', 'cs', 'pa', 'va', 'pe', 'deb', 'jr'];
-    order.forEach(d => {
-      o += '<optgroup label="' + esc(CAT.DEPTS[d]) + '">';
-      CAT.list.filter(c => c.dept === d).forEach(c => c.lv.forEach(lv => { o += '<option value="' + c.id + '|' + lv + '">' + esc(E.courseLabel(c, lv)) + '</option>'; }));
-      o += '</optgroup>';
-    });
-    return (equivHTML = o);
-  }
-  function renderTransfers() { renderTransfersRaw(); if (WA.combo) WA.combo.enhanceAll(); }
-  function renderTransfersRaw() {
-    const host = $('#transferRows'); host.innerHTML = '';
-    state.prior.transfers.forEach((t, i) => {
-      const upd = () => update(true);
-      const title = h('input', { type: 'text', value: t.title || '', placeholder: 'e.g., Biology — Lakeview HS' });
-      title.addEventListener('input', () => { t.title = title.value; save(); });
-      const eq = h('select', { html: equivOptions(), 'data-cb': '1' }); eq.value = t.equiv || '';
-      const area = h('select', { html: AREAS.map(a => '<option value="' + a[0] + '">' + a[1] + '</option>').join('') }); area.value = t.area || 'elec'; area.disabled = !!t.equiv;
-      const lang = h('select', { html: Object.keys(CAT.LANGS).map(k => '<option value="' + k + '">' + CAT.LANGS[k] + '</option>').join('') }); lang.value = t.lang || 'fr';
-      const cr = h('select', { html: [0.5, 1, 1.5, 2, 2.5, 3, 4].map(n => '<option value="' + n + '">' + n + '</option>').join('') }); cr.value = t.cr || 1;
-      const when = h('select', { html: WHEN.map(a => '<option value="' + a[0] + '">' + a[1] + '</option>').join('') }); when.value = t.when || '9';
-      eq.addEventListener('change', () => { t.equiv = eq.value; const p = E.parseSel(eq.value); if (p) { t.cr = p.c.cr; cr.value = p.c.cr; if (!t.title) { t.title = E.courseLabel(p.c, p.lv); title.value = t.title; } } area.disabled = !!eq.value; renderTransfers(); upd(); });
-      area.addEventListener('change', () => { t.area = area.value; renderTransfers(); upd(); });
-      lang.addEventListener('change', () => { t.lang = lang.value; upd(); });
-      cr.addEventListener('change', () => { t.cr = +cr.value; upd(); });
-      when.addEventListener('change', () => { t.when = when.value; upd(); });
-      if (!t.area) t.area = 'elec'; if (!t.cr) t.cr = 1; if (!t.when) t.when = '9'; if (!t.lang) t.lang = 'fr';
-      const showLang = !t.equiv && t.area === 'wl';
-      host.appendChild(h('div', { class: 'tr-row' },
-        h('label', { text: 'Course / school' }, title), h('label', { text: 'Woodward equivalent' }, eq),
-        h('label', { text: t.equiv ? 'Subject area' : showLang ? 'Area · language' : 'Subject area' }, area, showLang ? lang : null),
-        h('label', { text: 'Credits' }, cr), h('label', { text: 'Completed' }, when),
-        h('button', { type: 'button', class: 'x', 'aria-label': 'Remove transfer credit', text: '×', onclick: () => { state.prior.transfers.splice(i, 1); renderTransfers(); update(true); } })));
-    });
-  }
-
-  /* ---------------- cocurricular rows ---------------- */
-  function cocOptions() {
-    const cats = []; COC.list.forEach(a => { if (!cats.includes(a.cat)) cats.push(a.cat); });
-    return '<option value="">— choose an activity —</option>' + cats.map(c => '<optgroup label="' + esc(c) + '">' + COC.list.filter(a => a.cat === c).map(a => '<option value="' + esc(a.name) + '">' + esc(a.name) + '</option>').join('') + '</optgroup>').join('') + '<option value="__other">Other (write in)…</option>';
-  }
-  function renderCoc() { renderCocRaw(); if (WA.combo) WA.combo.enhanceAll(); }
-  function renderCocRaw() {
-    const host = $('#cocRows'); host.innerHTML = '';
-    if (!state.cocurr.length) state.cocurr.push({ name: '', status: 'active' });
-    state.cocurr.forEach((c, i) => {
-      const known = !c.name || COC.list.some(a => a.name === c.name);
-      const act = h('select', { html: cocOptions(), 'data-cb': '1', 'aria-label': 'Activity' }); act.value = known ? c.name : '__other';
-      const other = h('input', { type: 'text', placeholder: 'Activity name', 'aria-label': 'Activity name', value: known ? '' : c.name }); other.style.display = known ? 'none' : '';
-      const stat = h('select', { html: COC.STATUS.map(s => '<option value="' + s.v + '">' + s.label + '</option>').join(''), 'aria-label': 'Participation' }); stat.value = c.status || 'active';
-      const hint = h('small', { text: noteFor(c.name) });
-      act.addEventListener('change', () => { if (act.value === '__other') { other.style.display = ''; c.name = other.value; } else { other.style.display = 'none'; c.name = act.value; } hint.textContent = noteFor(c.name); update(true); });
-      other.addEventListener('input', () => { c.name = other.value; save(); });
-      stat.addEventListener('change', () => { c.status = stat.value; update(true); });
-      host.appendChild(h('div', { class: 'coc-row' }, h('div', {}, act, other, hint), stat,
-        h('button', { type: 'button', class: 'x', 'aria-label': 'Remove activity', text: '×', onclick: () => { state.cocurr.splice(i, 1); renderCoc(); update(true); } })));
-    });
-  }
-  const noteFor = n => { const a = COC.list.find(x => x.name === n); return a ? a.note : ''; };
-
-  function renderDisclaimer() {
-    const d = REF.disclaimer || (WA.docbuilder && WA.docbuilder.DEFAULT_DISCLAIMER), host = $('#disclaimer'); if (!d || !host) return;
-    host.innerHTML = ''; host.appendChild(h('h4', { text: d.title.toUpperCase() })); host.appendChild(h('p', { text: d.text }));
-  }
-
-  /* ---------------- reference panel ---------------- */
-  function renderRef() {
-    const host = $('#refBody'); host.innerHTML = '';
-    REF.sections.forEach(s => {
-      const d = h('div', { class: 'ref-sec' }, h('h4', { text: s.title }));
-      if (s.rows) { const t = h('table'); s.rows.forEach(r => t.appendChild(h('tr', {}, h('td', { text: r[0] }), h('td', { text: r[1] })))); d.appendChild(t); }
-      if (s.items) { const u = h('ul'); s.items.forEach(i => u.appendChild(h('li', { text: i }))); d.appendChild(u); }
-      host.appendChild(d);
-    });
-    host.appendChild(h('p', { class: 'muted', text: 'Reference current as of ' + REF.updated + '.' }));
-  }
-
-  /* ---------------- readiness / validation ---------------- */
-  const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  function infoProblems() {
-    const i = state.info, p = [];
-    if (!(WA.google && WA.google.user)) p.push('Sign in with Google (Step 1)');
-    if (!i.studentName.trim()) p.push('Student name'); if (!EMAIL.test(i.studentEmail.trim())) p.push('Valid student email');
-    if (!i.classOf) p.push('Projected graduation year'); if (!i.counselorName.trim()) p.push('Counselor name');
-    if (!i.date) p.push('Date');
-    return p;
-  }
-  function renderReadiness(P) {
-    const host = $('#readiness'); host.innerHTML = '';
-    const ip = infoProblems();
-    if (ip.length) { host.appendChild(h('h4', { text: 'Complete Step 1' })); ip.forEach(x => host.appendChild(h('div', { class: 'item', text: 'Needed: ' + x }))); }
-    if (P.errs.length) { host.appendChild(h('h4', { text: 'Plan items to resolve (' + P.errs.length + ')' })); P.errs.forEach(x => host.appendChild(h('div', { class: 'item', text: x }))); }
-    if (P.approvals.length) { host.appendChild(h('h4', { text: 'Approvals the plan depends on (' + P.approvals.length + ') — listed in the Google Doc' })); P.approvals.slice(0, 12).forEach(a => host.appendChild(h('div', { class: 'item w', text: ORD[a.grade] + ' · ' + a.course + ' — ' + a.note }))); if (P.approvals.length > 12) host.appendChild(h('div', { class: 'item w', text: '…and ' + (P.approvals.length - 12) + ' more' })); }
-    if (!ip.length && !P.errs.length) host.insertBefore(h('div', { class: 'ok-line', text: '✓ All graduation requirements are met and the plan is ready to submit.' }), host.firstChild);
-    $('#overrideBox').hidden = !P.errs.length;
-    if (!P.errs.length) { state.override.on = false; $('#ovOn').checked = false; }
-    renderNav(P);
-  }
+  <section class="card" id="s-dist" aria-labelledby="h-dist">
+    <h2 id="h-dist"><span class="step">★</span>Graduation Distinctions <span class="muted">(optional)</span></h2>
+    <p class="help">Woodward students can earn a “Distinction in Global Studies, Service Learning, Sustainability or Media” read at graduation. Tick any you are interested in: its required courses are listed beneath it and turn bold with a ✓ as they appear in the four-year plan, and a pop-up appears when all of a distinction’s courses are planned. The other requirements (applications, hours, capstone projects, portfolios, averages) are a checklist in the Google Doc.</p>
+    <div id="distTrack" aria-live="polite"></div>
+  </section>
 
 
-  /* ---------------- left sidebar: status dots + scroll-spy ---------------- */
-  function setDot(key, st, label) {
-    const el = document.querySelector('[data-dot="' + key + '"]'); if (!el) return;
-    el.className = 'sn-dot s-' + st; el.title = label; el.setAttribute('aria-label', label);
-  }
-  function renderNav(P) {
-    const ip = infoProblems();
-    setDot('info', ip.length ? 'part' : 'done', ip.length ? 'Needs: ' + ip.join(', ') : 'Complete');
-    const pr = state.prior;
-    const hasPrior = +pr.psCredit > 0 || pr.civics8 || pr.placement || pr.msLang || pr.msMath !== 'alg1' || pr.transfers.length > 0;
-    setDot('prior', hasPrior ? 'done' : 'none', hasPrior ? 'Prior credit / placement entered' : 'Optional — nothing entered');
-    let done = 0, bad = 0, sel = 0;
-    E.GRADES.forEach(g => {
-      const hasSel = E.ALL_SLOTS.some(s => state.plan[g][s.k].f || state.plan[g][s.k].s);
-      const fix = P.load[g].filter(x => x.lvl === 'error').length + Object.values(P.validation).filter(v => v.grade === g && v.state === 'blocked').length;
-      const st = !hasSel ? 'none' : fix ? 'err' : 'done';
-      if (hasSel) sel++; if (st === 'done') done++; if (st === 'err') bad++;
-      setDot('g' + g, st, !hasSel ? 'Not started' : fix ? fix + ' item(s) to fix' : 'Course load OK');
-    });
-    setDot('grades', bad ? 'err' : done === 4 ? 'done' : sel ? 'part' : 'none', bad ? 'Some grades need fixes' : done === 4 ? 'All four grades planned' : sel ? 'In progress' : 'Not started');
-    const hasCoc = state.cocurr.some(c => c.name);
-    setDot('coc', hasCoc ? 'done' : 'none', hasCoc ? 'Activities entered' : 'Optional — nothing entered');
-    { const hasInt = !!(String(state.info.colleges || '').trim() || String(state.info.major || '').trim()); setDot('college', hasInt ? 'done' : 'none', hasInt ? 'Interests entered' : 'Optional — nothing entered'); }
-    setDot('notes', state.info.notes.trim() ? 'done' : 'none', state.info.notes.trim() ? 'Notes entered' : 'Optional — no notes');
-    const t = P.tracker, n = t.areas.filter(a => a.met).length, b = $('#snTrk');
-    b.textContent = n + '/' + t.areas.length; b.className = 'sn-badge ' + (n === t.areas.length ? 's-done' : n ? 's-part' : 's-err');
-    b.title = n + ' of ' + t.areas.length + ' graduation requirements complete';
-    const ready = !ip.length && !P.errs.length;
-    setDot('submit', ready ? 'done' : (P.errs.length ? 'err' : 'part'), ready ? 'Ready to submit' : P.errs.length ? P.errs.length + ' plan item(s) to resolve' : 'Complete Step 1');
-    $('#snName').textContent = state.info.studentName.trim() || 'New course plan';
-    $('#snGrad').textContent = state.info.classOf ? 'Graduating Spring ' + state.info.classOf : 'Choose a graduation year in Step 1';
-  }
-  function initNav() {
-    const ids = ['s-info', 's-prior', 's-grades', 'grade-9', 'grade-10', 'grade-11', 'grade-12', 's-cocurr', 's-college', 's-notes', 's-tracker', 's-dist', 's-ref', 's-submit'];
-    const links = {}; $$('#sidenav a[data-spy]').forEach(a => { links[a.dataset.spy] = a; });
-    $$('#sidenav a[href^="#"]').forEach(a => a.addEventListener('click', e => {
-      const id = a.getAttribute('href').slice(1), t = document.getElementById(id); if (!t) return;
-      e.preventDefault(); if (id === 's-ref') t.open = true;
-      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      try { history.replaceState(null, '', '#' + id); } catch (x) { /* ignore */ }
-      mark(id === 's-grades' ? 's-grades' : id);
-    }));
-    const vis = new Set();
-    function mark(id) {
-      Object.keys(links).forEach(k => links[k].classList.remove('active'));
-      const grade = id && id.indexOf('grade-') === 0 ? id : null;
-      if (grade) { links[grade].classList.add('active'); links['s-grades'].classList.add('active'); }
-      else if (id && links[id]) links[id].classList.add('active');
-      const cur = grade ? links[grade] : (id && links[id]); if (cur && window.innerWidth <= 1040 && cur.scrollIntoView) { try { cur.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (x) { /* ignore */ } }
-    }
-    function pick() {
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) return mark('s-submit');
-      const g = ids.filter(i => i.indexOf('grade-') === 0 && vis.has(i))[0];
-      mark(g || ids.filter(i => vis.has(i))[0] || null);
-    }
-    if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver(entries => { entries.forEach(en => { if (en.isIntersecting) vis.add(en.target.id); else vis.delete(en.target.id); }); pick(); }, { rootMargin: '-12% 0px -62% 0px' });
-      ids.forEach(i => { const el = document.getElementById(i); if (el) io.observe(el); });
-      window.addEventListener('scroll', () => { if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) mark('s-submit'); }, { passive: true });
-    }
-    mark('s-info');
-  }
+  <!-- REFERENCE -->
+  <details class="card ref" id="s-ref">
+    <summary><span class="step">i</span>Graduation, scholarship &amp; NCAA reference <span class="muted">(this is also page 2 of the Google Doc)</span></summary>
+    <div id="refBody" class="ref-body"></div>
+  </details>
 
+  <!-- SUBMIT -->
+  <section class="card submit" id="s-submit" aria-labelledby="h-sub">
+    <h2 id="h-sub"><span class="step">5</span>Review &amp; Submit</h2>
+    <div id="disclaimer" class="disclaimer" role="note"></div>
+    <div id="readiness" class="ready" aria-live="polite"></div>
+    <div id="overrideBox" class="override" hidden>
+      <label class="chk"><input type="checkbox" id="ovOn"> <b>Counselor override</b> — submit even though items above are unresolved<small>Use for transfer students, approved exceptions, or items still pending approval. The override and reason are recorded in the Google Doc.</small></label>
+      <label>Reason for override <span class="req">*</span><textarea id="ovReason" rows="2"></textarea></label>
+    </div>
+    <p class="help small">Submitting creates a Google Doc in <b>your Google Drive</b> (you are the owner and can edit it) and shares it <b>view-only</b> with the student. Page 1 is the four-year plan; page 2 is the graduation, scholarship and NCAA reference. You must be signed in with Google (Step 1).</p>
+    <div class="actions">
+      <button type="button" class="btn primary big" id="submitBtn">Submit Course Plan</button>
+      <button type="button" class="btn ghost" id="saveDraft">Save draft to my Google Drive</button>
+      <button type="button" class="btn ghost" id="loadDraft">Open a saved draft…</button>
+      <button type="button" class="btn link" id="resetAll">Start over</button>
+    </div>
+    <div class="actions refresh-row"><button type="button" class="btn ghost" id="refreshBtn">Refresh a Doc’s tracker…</button><span class="help small">Changed courses with the dropdowns in a Google Doc you created? This recalculates its graduation and distinction trackers in place.</span></div>
+    <div id="refreshMsg" class="submitmsg" role="status" aria-live="polite"></div>
+    <p class="help small">Drafts are saved <b>privately in your own Google Drive</b>, in a folder named “WA Course Planner Drafts.” They are never shared with students and nothing is saved to this computer’s Downloads folder.</p>
+    <div id="submitMsg" class="submitmsg" role="status" aria-live="polite"></div>
+  </section>
+</main>
+</div>
 
+<footer class="foot"><div class="wrap">
+  <img src="assets/img/wordmark-red.png" alt="Woodward Academy" class="foot-mark">
+  <p>Planning tool only — the Upper School Scheduling &amp; Curriculum Guide and the Academic Dean’s office govern. Student information is sent only to Google (your Drive) when a plan is submitted — it does not pass through any other server. Drafts stay in this browser tab.</p>
+</div></footer>
 
-  /* compact, level-first labels so the level is never the part that gets cut off in a Docs chip */
-  const NAME_FIX = {
-    'Student Publications / Journalism (The Blade/butterknife)': 'Student Pubs: Journalism (Blade)', 'Student Publications / Yearbook (The Phoenix)': 'Student Pubs: Yearbook (Phoenix)',
-    'Capstone Technical Theatre: Principles of Theatrical Design': 'Cap. Tech Theatre: Design', 'Criminal Investigation, Forensics & Biotechnology': 'Forensics & Biotechnology',
-    'Landmark Supreme Court Cases: Civil Liberties': 'Landmark Supreme Court Cases', 'Introduction to Applied Science & Engineering': 'Intro Applied Sci & Engineering',
-    'Global Studies: History of the Middle East': 'Global Studies: Middle East', 'Global Studies: History of East Asia': 'Global Studies: East Asia',
-    'Ethical Dilemmas & Decision Making 1': 'Ethical Dilemmas 1', 'Ethical Dilemmas & Decision Making 2': 'Ethical Dilemmas 2',
-    'Tropical Ecology Field Study (Costa Rica, Summer)': 'Tropical Ecology (Summer)', 'Service Learning: Horizons (Summer)': 'Horizons Service (Summer)',
-    'Introduction to Digital Technology': 'Intro to Digital Technology', 'Intro to Photojournalism & Graphic Design': 'Intro Photojournalism & Design',
-    'Topics in Theatre: Performance': 'Topics: Theatre Performance', 'Topics in Theatre: Tech': 'Topics: Theatre Tech', 'Principles of Theatrical Design': 'Theatrical Design',
-    'Photography 1 (35mm film camera required)': 'Photography 1 (35mm film)', 'English Speakers of Other Languages (ESOL)': 'ESOL (English Learners)'
-  };
-  const ABBR = [[/^Introduction to /, 'Intro to '], [/\bIntroduction\b/, 'Intro'], [/^Advanced /, 'Adv. '], [/ Advanced /, ' Adv. '], [/\bComposition\b/, 'Comp.'], [/\bLiterature\b/, 'Lit.'], [/\bLanguage\b/, 'Lang.'], [/\bIndependent Study\b/, 'Indep. Study'],
-    [/\bGovernment\b/, 'Gov.'], [/\bEconomics\b/, 'Econ.'], [/\bEnvironmental\b/, 'Environ.'], [/\bPrinciples\b/, 'Princ.'], [/\bPerformance\b/, 'Perf.'], [/\bConditioning\b/, 'Cond.'], [/\bPhotography\b/, 'Photo.'], [/^Capstone /, 'Cap. ']];
-  function chipLabel(c, lv) {
-    let n = NAME_FIX[c.name] || ABBR.reduce((t, [a, b]) => t.replace(a, b), c.name);
-    if (!lv) return n;
-    if (lv === 'AP' && /^AP /.test(n)) return n;           // the name already starts with AP
-    return lv + ' · ' + n;
-  }
+<div id="stickybar" class="stickybar" role="region" aria-label="Credit progress">
+  <div class="sb-in wrap">
+    <span class="sb-label">Total credits <b id="sbTotal">0 / 22</b></span>
+    <span class="sb-bar"><span id="sbFill"></span></span>
+    <span class="sb-label"><b id="sbReq">0 of 10</b> requirements complete</span>
+    <span class="sb-label" id="sbGrad"></span>
+        <span class="sb-sound"><button type="button" class="sb-snd" id="sndBtn" aria-pressed="true" title="Turn the celebration sound on or off">🔊 Sound on</button><input type="range" id="sndVol" min="0" max="100" value="70" aria-label="Celebration sound volume" title="Volume"></span>
+    <a href="#s-tracker" class="sb-link">View tracker</a>
+  </div>
+</div>
 
-  /* ---------------- dropdown chips for the Google Doc (max 50 options each) ---------------- */
-  const CHIP_MAX = 50, CORE_DEPTS = ['eng', 'math', 'ss', 'sci', 'wl'];
-  function chipOptions(g, slotKey, half, current) {
-    const o = E.optionsFor(state, g, slotKey, half); let items = [];
-    o.groups.forEach(gr => gr.items.forEach(i => items.push({ value: i.value, dept: i.dept, appr: i.state === 'approval' })));
-    if (/^e\d$/.test(slotKey)) items = items.filter(i => CORE_DEPTS.indexOf(i.dept) < 0 || i.value === current);
-    const hasCur = !!current && items.some(i => i.value === current), room = CHIP_MAX - 1 - (current && !hasCur ? 1 : 0);
-    if (items.length > room) {
-      const byDept = {}; items.forEach(i => { (byDept[i.dept] = byDept[i.dept] || []).push(i); });
-      const depts = Object.keys(byDept), pick = new Set(); let r = 0;
-      while (pick.size < room && depts.some(d => byDept[d][r])) { depts.forEach(d => { if (byDept[d][r] && pick.size < room) pick.add(byDept[d][r]); }); r++; }
-      if (hasCur) { const cu = items.find(i => i.value === current); if (!pick.has(cu)) { const last = Array.from(pick).pop(); pick.delete(last); pick.add(cu); } }
-      items = items.filter(i => pick.has(i));
-    }
-    if (current && !hasCur && E.parseSel(current)) items.unshift({ value: current, appr: false });
-    const lab = v => { const p = E.parseSel(v); return p ? chipLabel(p.c, p.lv) : v; }, full = v => { const p = E.parseSel(v); return p ? E.courseLabel(p.c, p.lv) : v; };
-    const opts = [{ value: '', label: '— none —', full: '— none —', appr: false }].concat(items.map(i => ({ value: i.value, label: lab(i.value), full: full(i.value), appr: i.appr })));
-    if (opts.length < 2) opts.push({ value: '__na', label: '(no other eligible courses)', appr: false });
-    return opts;
-  }
-  function buildChips() {
-    const defs = {}, rows = {}, sum = {};
-    const add = (key, title, g, slotKey, half, current) => { defs[key] = { title, selected: current || '', options: chipOptions(g, slotKey, half, current) }; };
-    E.GRADES.forEach(g => {
-      rows[g] = {};
-      E.ALL_SLOTS.forEach(s => {
-        const cell = state.plan[g][s.k], f = E.parseSel(cell.f), sp = E.parseSel(cell.s), kf = 'c' + g + s.k + 'f', ks = 'c' + g + s.k + 's', list = [];
-        if (f && f.c.t === 'Y') { add(kf, ORD[g] + ' · ' + s.label + ' (Fall / Full year)', g, s.k, 0, cell.f); list.push({ key: kf, sem: '' }); }
-        else if (!f && !sp) { add(kf, ORD[g] + ' · ' + s.label + ' (Fall / Full year)', g, s.k, 0, ''); list.push({ key: kf, sem: '' }); }
-        else { add(kf, ORD[g] + ' · ' + s.label + ' (Fall)', g, s.k, 0, cell.f); add(ks, ORD[g] + ' · ' + s.label + ' (Spring)', g, s.k, 1, cell.s); list.push({ key: kf, sem: 'Fall' }, { key: ks, sem: 'Spring' }); }
-        rows[g][s.k] = list;
-      });
-      if (g < 12) {
-        const a = state.summer[g].su1, b = state.summer[g].su2; sum[g] = [];
-        add('c' + g + 'su1', 'Summer after ' + ORD[g] + ' · Summer course 1', g, 'su1', 0, a); sum[g].push({ key: 'c' + g + 'su1', sem: '' });
-        if (a || b) { add('c' + g + 'su2', 'Summer after ' + ORD[g] + ' · Summer course 2', g, 'su2', 0, b); sum[g].push({ key: 'c' + g + 'su2', sem: '' }); }
-      }
-    });
-    return { defs, rows, sum };
-  }
+<div id="celebrate" class="celebrate" aria-hidden="true"></div>
 
-  /* ---------------- submit ---------------- */
-  function dialog(html, buttons) {
-    return new Promise(res => {
-      const d = $('#dlg'); $('#dlgBody').innerHTML = html; const a = $('#dlgActions'); a.innerHTML = '';
-      buttons.forEach(b => a.appendChild(h('button', { type: 'button', class: 'btn ' + (b.primary ? 'primary' : 'ghost'), text: b.text, onclick: () => { d.close(); res(b.value); } })));
-      d.addEventListener('cancel', () => res(false), { once: true }); d.showModal();
-    });
-  }
-  function buildPayload(P) {
-    const i = state.info; const t = P.tracker;
-    const CH = buildChips();
-    const grades = E.GRADES.map(g => ({
-      grade: g, label: ORD[g] + ' Grade', year: yearLabel(g),
-      rows: E.CORE_SLOTS.map(s => ({ label: s.label, cells: E.cellText(state, g, s.k), kind: 'core', chips: CH.rows[g][s.k] })).concat(E.ELEC_SLOTS.map(s => ({ label: s.label, cells: E.cellText(state, g, s.k), kind: 'elec', chips: CH.rows[g][s.k] }))),
-      summer: g < 12 ? E.summerText(state, g) : [], summerChips: g < 12 ? CH.sum[g] : []
-    }));
-    const pr = state.prior, ms = [];
-    if (+pr.psCredit > 0) ms.push('Physical Science (8th grade): ' + pr.psCredit + ' unit science credit');
-    if (pr.civics8) ms.push('Government & Economics HP completed in 8th grade (Gov/Econ waived)');
-    const mathTxt = { alg1: 'Algebra 1 (CP/EP)', alg1hp: 'Algebra 1 (HP)', geohp: 'Algebra 1 (HP) + Geometry (HP)' }[pr.msMath]; if (mathTxt) ms.push('Middle School math: ' + mathTxt + ' (no U.S. credit)');
-    if (pr.msLang) { const [c, l] = pr.msLang.split(':'); ms.push(CAT.LANGS[c] + ' completed before 9th grade: ' + (+l === 1 ? 'Level 1' : 'Levels 1–' + l) + ' (no Upper School credit)'); }
-    if (pr.placement) ms.push('Language placement / heritage speaker');
-    const tr = pr.transfers.filter(x => +x.cr > 0).map(x => {
-      const p = E.parseSel(x.equiv); const w = WHEN.find(w => w[0] === String(x.when)); const a = AREAS.find(a => a[0] === x.area);
-      return (x.title || (p ? E.courseLabel(p.c, p.lv) : 'Transfer credit')) + ' — ' + x.cr + ' unit' + (+x.cr === 1 ? '' : 's') + ' (' + (p ? 'equiv. ' + E.courseLabel(p.c, p.lv) : (a ? a[1] : '') + (x.area === 'wl' ? ': ' + CAT.LANGS[x.lang] : '')) + '), ' + (w ? w[1] : '');
-    });
-    return {
-      version: 2,
-      student: { name: i.studentName.trim(), email: i.studentEmail.trim() }, counselor: { name: i.counselorName.trim(), email: (WA.google && WA.google.user ? WA.google.user.email : i.counselorEmail).trim() },
-      date: i.date, dateText: new Date(i.date + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      classOf: i.classOf, gradText: i.classOf ? 'Spring ' + i.classOf : '', interests: { colleges: (i.colleges || '').trim(), major: (i.major || '').trim() }, notes: i.notes.trim(), grades, chipDefs: CH.defs, prior: { ms, transfers: tr },
-      cocurr: state.cocurr.filter(c => c.name).map(c => { const a = COC.list.find(x => x.name === c.name); return { name: c.name, cat: a ? a.cat : 'Other', status: c.status === 'active' ? 'Currently participating' : 'Interested in exploring' }; }),
-      tracker: {
-        areas: t.areas.map(a => ({ key: a.key, label: a.label, have: a.have, req: a.req, status: a.status, detail: a.detail })),
-        ghsa: t.ghsa.map(x => ({ grade: x.grade, need: x.need, have: x.have, met: x.met })).concat([{ grade: 12, need: 22, have: t.cum[12], met: t.cum[12] >= 22 }]),
-        rigor: t.rigor, ncaa: { total: t.ncaa.total, met: t.ncaa.met }
-      },
-      distinctions: DIST.evaluate(E.allTaken(state), state.dist).filter(x => x.interested),
-      approvals: P.approvals, override: { on: !!state.override.on, reason: state.override.reason || '', issues: state.override.on ? P.errs : [] },
-      reference: REF
-    };
-  }
+<dialog id="dlg"><form method="dialog"><div id="dlgBody"></div><div class="dlg-actions" id="dlgActions"></div></form></dialog>
 
-  /* ---------------- Refresh tracker from Doc ---------------- */
-  function modelFor(st) {   // the same Doc content the planner would generate, for any saved plan
-    const prev = state; state = st;
-    try { return buildPayload(E.problems(st)); } finally { state = prev; }
-  }
-  const CHIP_SLOT = /^c(\d{1,2})(eng|math|ss|sci|wl|e[123])([fs])$/, CHIP_SUMMER = /^c(\d{1,2})(su[12])$/;
-  function refreshCompute(copy, chips) {
-    const st = normState(copy.state || {}), defs = copy.chipDefs || {}, changed = []; let unknown = 0;
-    const lab = v => { const x = E.parseSel(v); return x ? E.courseLabel(x.c, x.lv) : '— none —'; };
-    chips.forEach(c => {
-      const d = defs[c.key]; if (!d || c.label == null) { unknown++; return; }
-      const opt = d.options.find(o => o.label === c.label); if (!opt || opt.value === '__na') { unknown++; return; }
-      let m = CHIP_SLOT.exec(c.key), sm = CHIP_SUMMER.exec(c.key);
-      if (m) {
-        const g = +m[1], cell = st.plan[g] && st.plan[g][m[2]]; if (!cell || cell[m[3]] === opt.value) return;
-        changed.push(ORD[g] + ' ' + ((E.ALL_SLOTS.find(x => x.k === m[2]) || {}).label || m[2]) + (m[3] === 's' ? ' (Spring)' : '') + ': ' + lab(cell[m[3]]) + ' → ' + lab(opt.value));
-        cell[m[3]] = opt.value; if (m[3] === 'f') { const x = E.parseSel(opt.value); if (x && x.c.t === 'Y') cell.s = ''; }
-      } else if (sm) {
-        const g = +sm[1], sl = st.summer[g]; if (!sl || sl[sm[2]] === opt.value) return;
-        changed.push('Summer after ' + ORD[g] + ': ' + lab(sl[sm[2]]) + ' → ' + lab(opt.value)); sl[sm[2]] = opt.value;
-      }
-    });
-    const payload = modelFor(st), P = E.problems(st);
-    return { slots: WA.docbuilder.slots(payload), copy: Object.assign({}, copy, { state: JSON.parse(JSON.stringify(st)), savedAt: new Date().toISOString() }),
-      summary: { changed, unknown, issues: P.errs.slice(0, 6), areas: P.tracker.areas.filter(a => a.met).length + ' of ' + P.tracker.areas.length } };
-  }
-  async function refreshDoc() {
-    const out = $('#refreshMsg'), bad = t => { out.innerHTML = '<div class="bad">' + t + '</div>'; }; out.innerHTML = '';
-    if (showSync()) return bad('<b>Cannot refresh yet:</b> some site files are out of date. See the red notice at the top of the page.');
-    try { await WA.google.ensureToken(); } catch (e) { bad('<b>Please sign in with Google again.</b> ' + esc(e.message || String(e))); renderAuth(); return; }
-    let docs; try { docs = await WA.google.listPlanDocs(); } catch (e) { return bad(esc(e.message || String(e))); }
-    if (!docs.length) return bad('No plan Docs with a saved plan were found in your Drive. Docs created before this feature can’t be refreshed — submit the plan again to make one that can.');
-    const opts = docs.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + ' — ' + esc(new Date(f.modifiedTime).toLocaleDateString()) + '</option>').join('');
-    const ok = await dialog('<h3>Refresh which Google Doc?</h3><p>The planner reads the dropdown choices in the Doc, recalculates the graduation tracker and any distinctions, and updates them <b>in the same Doc</b>. Your “Completed” checkboxes and anything else you typed are left alone.</p><label>Doc <select id="rfSel">' + opts + '</select></label>', [{ text: 'Cancel', value: false }, { text: 'Refresh', value: true, primary: true }]);
-    if (!ok) return;
-    const id = $('#rfSel').value, btn = $('#refreshBtn'); btn.disabled = true; btn.textContent = 'Refreshing…';
-    try {
-      const r = await WA.google.refreshFromDoc(id, refreshCompute), s = r.summary || {};
-      out.innerHTML = '<div class="ok"><b>✓ Refreshed “' + esc(r.name) + '”.</b> ' + r.updated + ' tracker item' + (r.updated === 1 ? '' : 's') + ' updated; ' + esc(s.areas || '') + ' graduation requirements are projected to be complete.' +
-        (s.changed && s.changed.length ? '<br><small><b>Changes since the last version:</b> ' + s.changed.slice(0, 10).map(esc).join(' · ') + (s.changed.length > 10 ? ' · …' : '') + '</small>' : '<br><small>No course changes were found.</small>') +
-        (s.issues && s.issues.length ? '<br><small><b>Plan items to look at:</b> ' + s.issues.map(esc).join(' · ') + '</small>' : '') +
-        '<br><a href="' + esc(r.url) + '" target="_blank" rel="noopener">Open the Google Doc →</a></div>';
-    } catch (err) {
-      if (err && err.auth) { bad('<b>Your Google sign-in expired.</b> ' + esc(err.message)); renderAuth(); }
-      else bad('<b>Could not refresh the Doc.</b> ' + esc(err.message || String(err)) + (err && err.nocopy ? '' : ' Make sure you opened the planner with the same Google account that created the Doc, then try again.'));
-    } finally { btn.disabled = false; btn.textContent = 'Refresh a Doc’s tracker…'; }
-  }
-
-  async function submit() {
-    const P = E.problems(state); const msg = $('#submitMsg'); msg.innerHTML = '';
-    if (showSync()) { msg.innerHTML = '<div class="bad"><b>Cannot submit yet:</b> some site files are out of date (' + esc(syncProblems().join(', ')) + '). See the red notice at the top of the page.</div>'; return; }
-    const ip = infoProblems();
-    if (ip.length) { msg.innerHTML = '<div class="bad"><b>Please complete Step 1:</b> ' + esc(ip.join(', ')) + '.</div>'; $('#s-info').scrollIntoView({ behavior: 'smooth' }); markBad(); return; }
-    if (P.errs.length) {
-      if (!$('#ovOn').checked) { msg.innerHTML = '<div class="bad"><b>The plan has ' + P.errs.length + ' unresolved item(s).</b> Fix them above, or tick “Counselor override” and give a reason.</div>'; return; }
-      if (!$('#ovReason').value.trim()) { msg.innerHTML = '<div class="bad">Please enter a reason for the override.</div>'; $('#ovReason').focus(); return; }
-      state.override.on = true; state.override.reason = $('#ovReason').value.trim();
-    }
-    try { await WA.google.ensureToken(); }
-    catch (e) { msg.innerHTML = '<div class="bad"><b>Please sign in with Google again.</b> ' + esc(e.message || String(e)) + '</div>'; $('#s-info').scrollIntoView({ behavior: 'smooth' }); renderAuth(); return; }
-    const i = state.info, me = WA.google.user;
-    const ok = await dialog('<h3>Create this course plan?</h3><ul><li>A Google Doc for <b>' + esc(i.studentName) + '</b> (projected graduation Spring ' + esc(i.classOf) + ') will be created in <b>your Google Drive</b> (' + esc(me.email) + ').</li><li>You will be the <b>owner</b> and can edit it.</li><li>It will be shared <b>view-only</b> with ' + esc(i.studentEmail) + ', who will get a Google notification email.</li>' + (state.override.on ? '<li><b>Counselor override</b> will be recorded in the document.</li>' : '') + '</ul>', [{ text: 'Cancel', value: false }, { text: 'Create Google Doc', value: true, primary: true }]);
-    if (!ok) return;
-    const payload = buildPayload(P);
-    const btn = $('#submitBtn'); btn.disabled = true; btn.textContent = 'Creating Google Doc…';
-    try {
-      const logoUrl = new URL('assets/img/wordmark-red.png', location.href).href;
-      const data = await WA.google.createPlanDoc(payload, { logoUrl });
-      // a private copy of the plan (in your drafts folder) lets "Refresh tracker from Doc" recalculate this Doc later
-      try { await WA.google.savePlanCopy(data.id, { app: 'WA Course Planner', v: 1, savedAt: new Date().toISOString(), state: JSON.parse(JSON.stringify(state)), chipDefs: payload.chipDefs }, i.studentName.trim() + ' — ' + i.classOf); data.canRefresh = true; }
-      catch (e) { data.warnings = (data.warnings || []).concat(['A private copy of the plan could not be saved, so “Refresh tracker from Doc” will not be available for this Doc (' + (e.message || e) + ').']); }
-      msg.innerHTML = '<div class="ok"><b>✓ Course plan created in your Google Drive.</b><br>You own it and can edit it' + (data.shared ? '; ' + esc(i.studentEmail) + ' has view-only access.' : '.') +
-        '<br><a href="' + esc(data.url) + '" target="_blank" rel="noopener">Open the Google Doc →</a>' + (data.warnings && data.warnings.length ? '<br><small><b>Please note:</b> ' + esc(data.warnings.join(' ')) + '</small>' : '') + '</div>';
-    } catch (err) {
-      if (err && err.auth) { msg.innerHTML = '<div class="bad"><b>Your Google sign-in expired.</b> ' + esc(err.message) + '</div>'; renderAuth(); $('#s-info').scrollIntoView({ behavior: 'smooth' }); }
-      else msg.innerHTML = '<div class="bad"><b>Could not create the Google Doc.</b> ' + esc(err.message || String(err)) + (err && (err.status === 403 || err.status === 404) ? ' Make sure the Google Docs and Drive APIs are enabled for this site’s Google Cloud project.' : '') + ' Try again, or use “Save draft to my Google Drive” to keep your work.</div>';
-    } finally { btn.disabled = false; btn.textContent = 'Submit Course Plan'; }
-  }
-  function markBad() {
-    const i = state.info; const set = (p, bad) => { const el = $('[data-bind="' + p + '"]'); if (el) el.classList.toggle('bad', bad); };
-    set('info.studentName', !i.studentName.trim()); set('info.studentEmail', !EMAIL.test(i.studentEmail.trim())); set('info.counselorName', !i.counselorName.trim());
-    set('info.classOf', !i.classOf); set('info.date', !i.date);
-  }
-
-  /* ---------------- drafts (private files in the counselor's own Google Drive) ---------------- */
-  const hasWork = () => state.info.studentName.trim() || E.GRADES.some(g => E.ALL_SLOTS.some(s => state.plan[g][s.k].f || state.plan[g][s.k].s));
-  function needSignIn(msg) {
-    if (WA.google && WA.google.user) return false;
-    msg.innerHTML = '<div class="bad"><b>Please sign in with Google first (Step 1).</b> Drafts are saved in your own Google Drive.</div>'; $('#s-info').scrollIntoView({ behavior: 'smooth' }); return true;
-  }
-  async function saveDraft() {
-    const msg = $('#submitMsg'); msg.innerHTML = ''; if (needSignIn(msg)) return;
-    const btn = $('#saveDraft'); btn.disabled = true; const old = btn.textContent; btn.textContent = 'Saving…';
-    try {
-      const name = 'DRAFT — ' + (state.info.studentName.trim() || 'Unnamed student') + ' — ' + (state.info.date || '') + '.json';
-      const r = await WA.google.saveDraft(JSON.parse(JSON.stringify(state)), name);
-      msg.innerHTML = '<div class="ok"><b>✓ Draft ' + (r.updated ? 'updated' : 'saved') + ' in your Google Drive</b> (folder “WA Course Planner Drafts”): ' + esc(r.name) + '<br><small>Only you can open it. It was not downloaded to this computer.</small></div>';
-    } catch (e) { msg.innerHTML = '<div class="bad"><b>Could not save the draft.</b> ' + esc(e.message || String(e)) + '</div>'; }
-    finally { btn.disabled = false; btn.textContent = old; }
-  }
-  async function openDrafts() {
-    const msg = $('#submitMsg'); msg.innerHTML = ''; if (needSignIn(msg)) return;
-    let list;
-    try { list = await WA.google.listDrafts(); } catch (e) { msg.innerHTML = '<div class="bad"><b>Could not read your drafts.</b> ' + esc(e.message || String(e)) + '</div>'; return; }
-    const d = $('#dlg'), body = $('#dlgBody'), act = $('#dlgActions'); act.innerHTML = '';
-    body.innerHTML = '<h3>Your saved drafts</h3>' + (list.length ? '<p class="muted">Stored privately in your Google Drive.</p>' : '<p>No saved drafts yet. Use “Save draft to my Google Drive” first.</p>');
-    const wrap = h('div', { class: 'draftlist' });
-    list.forEach(f => {
-      const row = h('div', { class: 'draftrow' }, h('div', {}, h('b', { text: f.name.replace(/\.(json|placement)$/, '') }), h('small', { text: 'Last saved ' + new Date(f.modifiedTime).toLocaleString() })));
-      const open = h('button', { type: 'button', class: 'btn primary', text: 'Open' });
-      open.addEventListener('click', async () => {
-        if (hasWork() && !confirm('Opening this draft will replace the plan you are working on. Continue?')) return;
-        open.disabled = true; open.textContent = 'Opening…';
-        try { const data = await WA.google.loadDraft(f.id); mergeState(data); d.close(); fullRender(); msg.innerHTML = '<div class="ok">Draft opened: ' + esc(f.name) + '</div>'; }
-        catch (e) { open.disabled = false; open.textContent = 'Open'; msg.innerHTML = '<div class="bad">Could not open that draft. ' + esc(e.message || String(e)) + '</div>'; d.close(); }
-      });
-      const del = h('button', { type: 'button', class: 'btn ghost', text: 'Delete' });
-      del.addEventListener('click', async () => {
-        if (!confirm('Move this draft to your Drive trash?')) return;
-        try { await WA.google.trashDraft(f.id); row.remove(); } catch (e) { alert('Could not delete: ' + (e.message || e)); }
-      });
-      row.appendChild(h('div', { class: 'draftbtns' }, open, del)); wrap.appendChild(row);
-    });
-    body.appendChild(wrap);
-    act.appendChild(h('button', { type: 'button', class: 'btn ghost', text: 'Close', onclick: () => d.close() }));
-    d.showModal();
-  }
-  async function reset() {
-    const ok = await dialog('<h3>Start over?</h3><p>This clears the student information, prior credit, plan and cocurriculars.</p>', [{ text: 'Cancel', value: false }, { text: 'Clear everything', value: true, primary: true }]);
-    if (!ok) return; state = E.emptyState(); try { sessionStorage.removeItem(SKEY); } catch (e) { /* */ } fullRender();
-  }
-
-
-  /* ---------------- import a plan file from the Student & Family Planner ---------------- */
-  const hasPlanWork = () => !!(state.info.studentName.trim() || state.cocurr.some(c => c.name) || state.prior.transfers.length || E.GRADES.some(g => E.ALL_SLOTS.some(s => state.plan[g][s.k].f || state.plan[g][s.k].s)));
-  function importFamilyFile(file) {
-    const out = $('#importMsg'); out.innerHTML = '';
-    const bad = m => { out.innerHTML = '<div class="bad">' + esc(m) + '</div>'; };
-    const r = new FileReader();
-    r.onload = async () => {
-      let res; try { res = WA.planio.parse(String(r.result)); } catch (e) { bad(e.message); return; }
-      let sp = null;
-      if (res.kind === 'one') sp = res.plan;
-      else {
-        const pick = await dialog('<h3>Which plan would you like to import?</h3><p class="muted">This file has up to three plans from the family.</p>', res.plans.map((p, i) => ({ text: p.name, value: i, primary: i === res.cur })).concat([{ text: 'Cancel', value: false }]));
-        if (pick === false || pick === undefined) return; sp = res.plans[pick];
-      }
-      if (hasPlanWork() && !(await dialog('<h3>Replace the current plan?</h3><p>Importing “' + esc(sp.name) + '” replaces the courses, prior credit and cocurriculars on this page. Student and counselor information stays.</p>', [{ text: 'Cancel', value: false }, { text: 'Import', value: true, primary: true }]))) return;
-      state.plan = sp.plan; state.summer = sp.summer; state.prior = Object.assign(E.emptyState().prior, sp.prior); state.cocurr = sp.cocurr; state.dist = sp.dist; if (sp.colleges) state.info.colleges = sp.colleges; if (sp.major) state.info.major = sp.major;
-      if (sp.classOf) state.info.classOf = sp.classOf;
-      if (sp.notes) state.info.notes = (state.info.notes ? state.info.notes.trim() + '\n\n' : '') + 'From the family planner (' + sp.name + '): ' + sp.notes;
-      fullRender();
-      out.innerHTML = '<div class="ok"><b>✓ Imported “' + esc(sp.name) + '”' + (sp.classOf ? ' (Class of ' + esc(sp.classOf) + ')' : '') + '.</b> Please enter the student’s name and email in Step 1, then review the plan before submitting.</div>';
-    };
-    r.readAsText(file);
-  }
-
-  /* ---------------- Google sign-in UI ---------------- */
-  function renderAuth() {
-    const u = WA.google && WA.google.user;
-    $('#signinOut').hidden = !!u; $('#signinIn').hidden = !u;
-    if (u) {
-      $('#siName').textContent = u.name; $('#siEmail').textContent = u.email;
-      state.info.counselorEmail = u.email; if (!state.info.counselorName.trim()) state.info.counselorName = u.name;
-    }
-    const e = $('[data-bind="info.counselorEmail"]'); if (e) e.value = u ? u.email : '';
-    const n = $('[data-bind="info.counselorName"]'); if (n) n.value = state.info.counselorName;
-    renderReadiness(E.problems(state)); save();
-  }
-  function initAuth() {
-    const err = $('#signinErr');
-    WA.google.onChange = () => renderAuth();
-    $('#gsiBtn').addEventListener('click', async () => {
-      err.hidden = true; const b = $('#gsiBtn'); b.disabled = true;
-      try { await WA.google.signIn(); } catch (e) { err.textContent = e.message || String(e); err.hidden = false; }
-      finally { b.disabled = false; }
-    });
-    $('#signOutBtn').addEventListener('click', () => WA.google.signOut());
-    if (!WA.google.configured()) { err.textContent = 'Google sign-in is not configured yet: an administrator must add GOOGLE_CLIENT_ID in assets/js/config.js (see README).'; err.hidden = false; }
-    renderAuth();
-  }
-
-  /* ---------------- celebration sound controls ---------------- */
-  function initSound() {
-    const S = WA.sound, btn = $('#sndBtn'), vol = $('#sndVol'); if (!S || !btn || !vol) return;
-    const sync = () => { const on = S.isOn(); btn.setAttribute('aria-pressed', String(on)); btn.textContent = on ? '🔊 Sound on' : '🔇 Sound off'; vol.disabled = !on; };
-    btn.addEventListener('click', () => { S.setOn(!S.isOn()); sync(); if (S.isOn()) S.play('musicbox'); });
-    vol.value = Math.round(S.volume() * 100);
-    vol.addEventListener('input', () => S.setVolume(vol.value / 100)); vol.addEventListener('change', () => S.play('musicbox'));
-    sync();
-  }
-
-  /* ---------------- boot ---------------- */
-  function syncBound() { $$('[data-bind]').forEach(el => { const v = getPath(el.dataset.bind); if (el.type === 'checkbox') el.checked = !!v; else el.value = v == null ? '' : v; }); }
-  function fullRender() {
-    syncBound(); labelGrades(); renderTransfers(); renderCoc();
-    $$('#grades select').forEach(s => { delete s.dataset.sig; });
-    $('#ovOn').checked = !!state.override.on; $('#ovReason').value = state.override.reason || '';
-    update(false);
-  }
-  function showInitProblem(list) {
-    let el = document.getElementById('initwarn');
-    if (!el) { el = document.createElement('div'); el.id = 'initwarn'; el.className = 'syncwarn'; el.setAttribute('role', 'alert'); document.body.insertBefore(el, document.body.firstChild); }
-    el.innerHTML = '<b>The planner hit a problem while starting, so some features may not work.</b> This almost always means some site files are from an older update: upload <b>every file</b> from the latest update (index.html and the .js files together), wait a minute, then hard-refresh (Ctrl+Shift+R). <small>Details: ' + list.map(esc).join(' · ') + '</small>';
-  }
-  function init() {
-    const problems = [];
-    const step = (name, fn) => { try { fn(); } catch (e) { problems.push(name + ' — ' + ((e && e.message) || e)); try { console.error('[planner] ' + name, e); } catch (x) { /* ignore */ } } };
-    const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); else problems.push('the page is missing ' + sel + ' (index.html is older than the other files)'); };
-    step('file check', showSync);        // first: name any out-of-date files
-    step('sign-in', initAuth);           // sign-in is wired up before anything that could fail
-    step('saved plan', load); step('form fields', initBindings); step('grade cards', buildGrades); step('search boxes', () => { if (WA.combo) WA.combo.enhanceAll(); }); step('reference', () => { renderRef(); renderDisclaimer(); });
-    step('footer', () => { const fp = document.querySelector('.foot p'); if (fp) fp.appendChild(h('span', { class: 'build', text: ' Build ' + BUILD + '.' })); });
-    on('#addTransfer', 'click', () => { state.prior.transfers.push({ title: '', equiv: '', area: 'elec', cr: 1, when: '9', lang: 'fr' }); renderTransfers(); update(true); });
-    on('#addCoc', 'click', () => { state.cocurr.push({ name: '', status: 'active' }); renderCoc(); });
-    on('#submitBtn', 'click', submit); on('#saveDraft', 'click', saveDraft); on('#loadDraft', 'click', openDrafts); on('#resetAll', 'click', reset); on('#refreshBtn', 'click', refreshDoc);
-    on('#importFamily', 'change', e => { if (e.target.files[0]) importFamilyFile(e.target.files[0]); e.target.value = ''; });
-    on('#ovOn', 'change', e => { state.override.on = e.target.checked; save(); }); on('#ovReason', 'input', e => { state.override.reason = e.target.value; save(); });
-    ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => on('[data-bind="' + p + '"]', 'input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
-    step('plan display', fullRender); step('sign-in display', renderAuth); step('navigation', initNav); step('sound', initSound); step('file check', showSync);
-    if (problems.length) showInitProblem(problems);
-  }
-  window.WA.app = { refreshCompute, normState, modelFor, celebrate: a => { celQueue.push(a); runCel(); }, chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
-})();
+<script src="assets/js/config.js?v=g"></script>
+<script src="assets/js/catalog.js?v=m"></script>
+<script src="assets/js/cocurriculars.js?v=g"></script>
+<script src="assets/js/engine.js?v=o"></script>
+<script src="assets/js/reference.js?v=m"></script>
+<script src="assets/js/distinctions.js?v=n"></script>
+<script src="assets/js/planio.js?v=o"></script>
+<script src="assets/js/distui.js?v=n"></script>
+<script src="assets/js/combo.js?v=g"></script>
+<script src="assets/js/docbuilder.js?v=o"></script>
+<script src="assets/js/google.js?v=q"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="assets/js/sound.js?v=k"></script>
+<script src="assets/js/app.js?v=q"></script>
+</body>
+</html>
