@@ -4,8 +4,10 @@
  * Everything read from a file is re-validated: unknown courses, odd values and oversized text are dropped. */
 (function (root) {
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['planio.js'] = '2';
+  (WA.versions = WA.versions || {})['planio.js'] = '4';
   const CAT = WA.catalog || require('./catalog.js');
+  const DIST = WA.distinctions || require('./distinctions.js');
+  const MKEYS = new Set(DIST.manualKeys());
   const GR = [9, 10, 11, 12], SLOTS = ['eng', 'math', 'ss', 'sci', 'wl', 'e1', 'e2', 'e3'], SUM = ['su1', 'su2'];
   const MATH = ['none', 'alg1', 'alg1hp', 'geohp'], LANGV = [''].concat(['fr', 'sp', 'de', 'ja', 'zh'].reduce((a, c) => a.concat([1, 2, 3, 4].map(n => c + ':' + n)), []));
   const AREAS = ['eng', 'math', 'ss', 'sci', 'wl', 'pe', 'fa', 'elec'], WHEN = ['8', '9', '10', '11', '12', 's9', 's10', 's11'];
@@ -14,9 +16,15 @@
   const course = v => { if (typeof v !== 'string' || !v) return null; const [id, lv] = v.split('|'); const c = CAT.by[id]; return c && c.lv.includes(lv || '') ? c : null; };
   const sel = v => (course(v) ? v : '');
 
+  function sanitizeDist(d) {
+    d = d && typeof d === 'object' ? d : {}; const interest = {}, checks = {};
+    DIST.IDS.forEach(id => { if (d.interest && d.interest[id]) interest[id] = true; });
+    Object.keys(d.checks && typeof d.checks === 'object' ? d.checks : {}).forEach(k => { if (MKEYS.has(k) && d.checks[k]) checks[k] = true; });
+    return { interest, checks };
+  }
   function sanitizePlan(raw) {
     raw = raw && typeof raw === 'object' ? raw : {};
-    const out = { name: str(raw.name, 40) || 'My plan', classOf: /^20\d\d$/.test(String(raw.classOf)) ? String(raw.classOf) : '', plan: {}, summer: {}, prior: {}, cocurr: [], notes: str(raw.notes, 2000).replace(/\u0000/g, '') };
+    const out = { name: str(raw.name, 40) || 'My plan', classOf: /^20\d\d$/.test(String(raw.classOf)) ? String(raw.classOf) : '', plan: {}, summer: {}, prior: {}, cocurr: [], notes: str(raw.notes, 2000).replace(/\u0000/g, ''), colleges: str(raw.colleges, 240), major: str(raw.major, 240) };
     GR.forEach(g => {
       out.plan[g] = {}; out.summer[g] = {};
       SLOTS.forEach(k => {
@@ -39,6 +47,7 @@
         return { title: str(t.title, 60), equiv: sel(t.equiv), area: AREAS.includes(t.area) ? t.area : 'elec', lang: CAT.LANGS[t.lang] ? t.lang : 'fr', cr: cr >= 0.5 && cr <= 8 ? cr : 1, when: WHEN.includes(String(t.when)) ? String(t.when) : '9' };
       })
     };
+    out.dist = sanitizeDist(raw.dist);
     out.cocurr = (Array.isArray(raw.cocurr) ? raw.cocurr : []).slice(0, 40).map(c => ({ name: str(c && c.name, 100), status: c && c.status === 'interest' ? 'interest' : 'active' })).filter(c => c.name);
     return out;
   }
@@ -55,6 +64,6 @@
     if (o && o.info && o.plan) throw new Error('This looks like a counselor draft file, which this planner cannot open.');
     throw new Error('That file is not a Woodward Academy plan file.');
   }
-  WA.planio = { sanitizePlan, exportOne, exportAll, parse };
+  WA.planio = { sanitizeDist, sanitizePlan, exportOne, exportAll, parse };
   if (typeof module !== 'undefined') module.exports = WA.planio;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
