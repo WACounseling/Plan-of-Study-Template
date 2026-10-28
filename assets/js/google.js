@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const WA = window.WA = window.WA || {};
-  (WA.versions = WA.versions || {})['google.js'] = '14';
+  (WA.versions = WA.versions || {})['google.js'] = '15';
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
   const SCOPE = 'openid email profile ' + DRIVE_FILE;
@@ -41,7 +41,7 @@
   function request(prompt, hint) {
     return new Promise((res, rej) => {
       if (!configured()) return rej(new Error('Google sign-in is not configured yet. An administrator must add GOOGLE_CLIENT_ID in assets/js/config.js.'));
-      if (!init()) return rej(new Error('Google sign-in is still loading. Wait a moment and try again (or check your connection).'));
+      if (!init()) return rej(new Error(window.__waBoot && (window.__waBoot.failed || []).some(f => /Google sign-in library/.test(f)) ? 'Google’s sign-in library did not load: accounts.google.com looks blocked on this network or browser (an extension or school filter). Try another network or browser, or ask IT to allow accounts.google.com.' : 'Google sign-in is still loading. Wait a moment and try again (or check your connection).'));
       pending = { res, rej }; tokenClient.requestAccessToken(hint ? { prompt, hint } : { prompt });
     });
   }
