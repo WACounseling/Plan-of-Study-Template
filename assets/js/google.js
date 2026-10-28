@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const WA = window.WA = window.WA || {};
-  (WA.versions = WA.versions || {})['google.js'] = '9';
+  (WA.versions = WA.versions || {})['google.js'] = '13';
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
   const SCOPE = 'openid email profile ' + DRIVE_FILE;
@@ -129,47 +129,65 @@
     });
   }
   function scan(doc) {
-    const out = { tables: [], paras: [], tokens: {}, dd: [] };
+    const out = { tables: [], paras: [], tokens: {}, pbs: [], dd: [], ss: [], se: [], cb: [] };
     walk(doc.body && doc.body.content, n => {
       if (n.type === 't') { out.tables.push(n); return; }
       out.paras.push(n);
       (n.el.paragraph.elements || []).forEach(pe => {
         const c = pe.textRun && pe.textRun.content; if (!c) return;
-        ['[[LOGO]]', '[[PB]]'].forEach(tk => { const i = c.indexOf(tk); if (i >= 0 && out.tokens[tk] == null) out.tokens[tk] = pe.startIndex + i; });
+        ['[[LOGO]]'].forEach(tk => { const i = c.indexOf(tk); if (i >= 0 && out.tokens[tk] == null) out.tokens[tk] = pe.startIndex + i; });
+        const pbi = c.indexOf('[[PB]]'); if (pbi >= 0) out.pbs.push(pe.startIndex + pbi);
         const re = /\[\[DD:([a-z0-9]+)\]\]/g; let m; while ((m = re.exec(c))) out.dd.push({ key: m[1], idx: pe.startIndex + m.index, len: m[0].length });
+        const rs = /\[\[S:([a-z0-9-]+)\]\]/g; let q; while ((q = rs.exec(c))) out.ss.push({ name: q[1], idx: pe.startIndex + q.index, len: q[0].length });
+        const rend = /\[\[\/S\]\]/g; while ((q = rend.exec(c))) out.se.push({ idx: pe.startIndex + q.index, len: q[0].length });
+        const ci = c.indexOf('[[CB]]'); if (ci >= 0) out.cb.push({ idx: pe.startIndex + ci, len: 6, pStart: n.el.startIndex, pEnd: n.el.endIndex });
       });
     });
     return out;
   }
   const PT = n => ({ magnitude: n, unit: 'PT' });
   // expected tables in document order: [columns, column widths in points]
-  const TABLE_SPECS = [
+  // page 1 tables, then (when distinctions were chosen) the page-2 rule + distinctions grid; the last rule + 2-column table are always the eligibility reference
+  const FRONT_SPECS = [
     [2, [230, 310], 'MIDDLE'],             // header: logo | title (centered vertically)
     [1, [540]],                            // red rule
     [4, [78, 150, 112, 200]],              // student / counselor info
     [5, [54, 121.5, 121.5, 121.5, 121.5]], // four-year grid
     [5, [108, 108, 108, 108, 108]],        // requirement tracker
     [2, [270, 270]],                       // cocurriculars
-    [1, [540]],                            // red rule (page 2)
-    [2, [270, 270]]                        // reference columns
+    [1, [540]],                            // red rule (page 2: college & career interests)
+    [2, [150, 390]],                       // college & career interests: question | response
+    [1, [540]],                            // red rule (distinctions)
+    [2, [270, 270], 'TOP', { dist: true }] // distinctions: two columns, spacer rows between
   ];
+  const REAR_SPECS = [[1, [540]], [2, [270, 270], 'TOP', { ref: true }]];   // red rule + eligibility reference columns (last page)
+  function assignSpecs(tables) {
+    const n = tables.length, rear = n >= 2 && tables[n - 1].cols === 2 && tables[n - 2].cols === 1 ? 2 : 0, map = new Map(); let si = 0;
+    tables.slice(0, n - rear).forEach(t => { let k = si; while (k < FRONT_SPECS.length && FRONT_SPECS[k][0] !== t.cols) k++; if (k >= FRONT_SPECS.length) return; si = k + 1; map.set(t, FRONT_SPECS[k]); });
+    if (rear) { map.set(tables[n - 2], REAR_SPECS[0]); map.set(tables[n - 1], REAR_SPECS[1]); }
+    return map;
+  }
   function layoutRequests(sc) {
-    const r = [], used = [];
-    let si = 0, refRange = null;
+    const r = [], used = [], specs = assignSpecs(sc.tables);
+    let refRange = null;
     sc.tables.forEach(t => {
-      // match the next unused spec with the same column count
-      let k = si; while (k < TABLE_SPECS.length && TABLE_SPECS[k][0] !== t.cols) k++;
-      if (k >= TABLE_SPECS.length) return; si = k + 1;
-      const widths = TABLE_SPECS[k][1], isRule = t.cols === 1, align = TABLE_SPECS[k][2] || 'TOP';
+      const spec = specs.get(t); if (!spec) return;
+      const widths = spec[1], isRule = t.cols === 1, align = spec[2] || 'TOP', flags = spec[3] || {};
       const loc = { index: t.start };
       widths.forEach((w, ci) => r.push({ updateTableColumnProperties: { tableStartLocation: loc, columnIndices: [ci], tableColumnProperties: { widthType: 'FIXED_WIDTH', width: PT(w) }, fields: 'widthType,width' } }));
       r.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: loc, rowIndex: 0, columnIndex: 0 }, rowSpan: t.rows, columnSpan: t.cols },
         tableCellStyle: isRule ? { paddingTop: PT(0), paddingBottom: PT(0), paddingLeft: PT(0), paddingRight: PT(0), contentAlignment: 'TOP' } : { paddingTop: PT(3), paddingBottom: PT(3), paddingLeft: PT(4), paddingRight: PT(4), contentAlignment: align },
         fields: 'paddingTop,paddingBottom,paddingLeft,paddingRight,contentAlignment' } });
       if (isRule) r.push({ updateTableRowStyle: { tableStartLocation: loc, rowIndices: [0], tableRowStyle: { minRowHeight: PT(3) }, fields: 'minRowHeight' } });
+      if (flags.dist) {   // clear gutter between the two columns, and generous spacer rows between distinctions
+        [0, 1].forEach(ci => r.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: loc, rowIndex: 0, columnIndex: ci }, rowSpan: t.rows, columnSpan: 1 },
+          tableCellStyle: { paddingTop: PT(0), paddingBottom: PT(0), paddingLeft: PT(ci ? 10 : 0), paddingRight: PT(ci ? 0 : 10), contentAlignment: 'TOP' }, fields: 'paddingTop,paddingBottom,paddingLeft,paddingRight,contentAlignment' } }));
+        for (let ri = 1; ri < t.rows; ri += 2) r.push({ updateTableRowStyle: { tableStartLocation: loc, rowIndices: [ri], tableRowStyle: { minRowHeight: PT(16) }, fields: 'minRowHeight' } });
+      }
       used.push({ t, rule: isRule });
-      if (k === TABLE_SPECS.length - 1) refRange = { start: t.el.startIndex, end: t.el.endIndex };
+      if (flags.ref) refRange = { start: t.el.startIndex, end: t.el.endIndex };
     });
+
     // tight, uniform paragraph spacing (Docs' default 1.15 spacing otherwise pushes page 1 onto a second page)
     const last = sc.paras.length ? sc.paras[sc.paras.length - 1].el.endIndex : 2;
     r.push({ updateParagraphStyle: { range: { startIndex: 1, endIndex: Math.max(2, last - 1) }, paragraphStyle: { lineSpacing: 100, spaceAbove: PT(0), spaceBelow: PT(0) }, fields: 'lineSpacing,spaceAbove,spaceBelow' } });
@@ -214,21 +232,37 @@
     const keys = Object.keys(labels);
     return { creates, edits, textFallback: keys.map(k => ({ replaceAllText: { containsText: { text: '[[DD:' + k + ']]', matchCase: true }, replaceText: labels[k] } })), count: edits.length };
   }
+  /* ---- refreshable text (named ranges) and real checklist boxes ---- */
+  function slotPlan(sc) {
+    const seq = sc.ss.map(x => ({ t: 's', x })).concat(sc.se.map(x => ({ t: 'e', x }))).sort((a, b) => a.x.idx - b.x.idx), pairs = []; let cur = null;
+    seq.forEach(q => { if (q.t === 's') cur = q.x; else if (cur) { pairs.push({ name: cur.name, s: cur, e: q.x }); cur = null; } });
+    const edits = [], names = Array.from(new Set(pairs.map(p => p.name)));
+    pairs.forEach(p => {
+      edits.push({ idx: p.e.idx, reqs: [{ deleteContentRange: { range: { startIndex: p.e.idx, endIndex: p.e.idx + p.e.len } } }] });
+      edits.push({ idx: p.s.idx, reqs: [{ deleteContentRange: { range: { startIndex: p.s.idx, endIndex: p.s.idx + p.s.len } } }, { createNamedRange: { name: p.name, range: { startIndex: p.s.idx, endIndex: p.e.idx - p.s.len } } }] });
+    });
+    sc.cb.forEach(c => edits.push({ idx: c.idx, reqs: [{ deleteContentRange: { range: { startIndex: c.idx, endIndex: c.idx + c.len } } }, { createParagraphBullets: { range: { startIndex: c.pStart, endIndex: c.pEnd - c.len }, bulletPreset: 'BULLET_CHECKBOX' } }] }));
+    const fallback = names.map(n => ({ replaceAllText: { containsText: { text: '[[S:' + n + ']]', matchCase: true }, replaceText: '' } }));
+    if (names.length) fallback.push({ replaceAllText: { containsText: { text: '[[/S]]', matchCase: true }, replaceText: '' } });
+    if (sc.cb.length) fallback.push({ replaceAllText: { containsText: { text: '[[CB]]', matchCase: true }, replaceText: '\u2610 ' } });
+    return { edits, fallback, count: pairs.length + sc.cb.length };
+  }
   async function finishDoc(id, tok, logoUrl, warnings, chipDefs) {
     const doc = await api('https://docs.googleapis.com/v1/documents/' + id, {}, tok);
-    const sc = scan(doc); const pb = sc.tokens['[[PB]]'], logo = sc.tokens['[[LOGO]]'];
+    const sc = scan(doc); const logo = sc.tokens['[[LOGO]]'];
     const margins = { updateDocumentStyle: { documentStyle: { marginTop: PT(36), marginBottom: PT(36), marginLeft: PT(36), marginRight: PT(36), pageSize: { width: PT(612), height: PT(792) } }, fields: 'marginTop,marginBottom,marginLeft,marginRight,pageSize' } };
     let layout = []; try { layout = layoutRequests(sc); } catch (e) { warnings.push('Layout clean-up was skipped (' + e.message + ').'); }
-    const cp = chipPlan(chipDefs, sc.dd);
+    const cp = chipPlan(chipDefs, sc.dd), sp = slotPlan(sc);
     // style requests move no indices, so they go first; edits that change text go last, later-in-document first
     const build = o => {
       const edits = [], tail = [];
-      if (pb != null) edits.push({ idx: pb, reqs: [{ deleteContentRange: { range: { startIndex: pb, endIndex: pb + 6 } } }, { insertPageBreak: { location: { index: pb } } }] });
+      sc.pbs.forEach(pb => edits.push({ idx: pb, reqs: [{ deleteContentRange: { range: { startIndex: pb, endIndex: pb + 6 } } }, { insertPageBreak: { location: { index: pb } } }] }));
       if (logo != null) {
         if (o.img && logoUrl) edits.push({ idx: logo, reqs: [{ deleteContentRange: { range: { startIndex: logo, endIndex: logo + 8 } } }, { insertInlineImage: { uri: logoUrl, location: { index: logo }, objectSize: { width: PT(150), height: PT(43) } } }] });
         else tail.push({ replaceAllText: { containsText: { text: '[[LOGO]]', matchCase: true }, replaceText: 'WOODWARD ACADEMY' } });
       }
       if (o.chips) edits.push.apply(edits, cp.edits); else tail.push.apply(tail, cp.textFallback);
+      if (o.nr) edits.push.apply(edits, sp.edits); else tail.push.apply(tail, sp.fallback);
       edits.sort((a, b) => b.idx - a.idx);
       const r = [margins];
       if (o.layout) r.push.apply(r, layout);
@@ -237,21 +271,21 @@
       return r.concat(tail);
     };
     const send = r => api('https://docs.googleapis.com/v1/documents/' + id + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: r }) }, tok);
-    const W = { logo: 'The logo image could not be inserted, so a text wordmark was used.', chips: 'Course dropdowns could not be added, so courses appear as plain text.', layout: 'Table layout clean-up could not be applied; margins, page break and logo were set.' };
-    const attempts = [
-      { o: { img: true, chips: true, layout: true }, w: [] },
-      { o: { img: false, chips: true, layout: true }, w: ['logo'] },
-      { o: { img: true, chips: false, layout: true }, w: ['chips'] },
-      { o: { img: false, chips: false, layout: true }, w: ['logo', 'chips'] },
-      { o: { img: false, chips: false, layout: false }, w: ['logo', 'chips', 'layout'] }
-    ].filter(a => cp.count || !a.o.chips);
+    const W = { logo: 'The logo image could not be inserted, so a text wordmark was used.', chips: 'Course dropdowns could not be added, so courses appear as plain text.',
+      nr: 'The “Completed” checkboxes and the Refresh feature could not be added, so tracker items appear as plain text.', layout: 'Table layout clean-up could not be applied; margins, page break and logo were set.' };
+    const combos = [
+      { o: { img: 1, chips: 1, nr: 1, layout: 1 }, w: [] }, { o: { img: 0, chips: 1, nr: 1, layout: 1 }, w: ['logo'] }, { o: { img: 1, chips: 0, nr: 1, layout: 1 }, w: ['chips'] },
+      { o: { img: 1, chips: 1, nr: 0, layout: 1 }, w: ['nr'] }, { o: { img: 1, chips: 0, nr: 0, layout: 1 }, w: ['chips', 'nr'] }, { o: { img: 0, chips: 0, nr: 0, layout: 1 }, w: ['logo', 'chips', 'nr'] },
+      { o: { img: 0, chips: 0, nr: 0, layout: 0 }, w: ['logo', 'chips', 'nr', 'layout'] }
+    ];
+    const seen = new Set(), attempts = [];
+    combos.forEach(c => { const o = { img: !!c.o.img, chips: cp.count ? !!c.o.chips : true, nr: sp.count ? !!c.o.nr : true, layout: !!c.o.layout }, sig = JSON.stringify(o); if (seen.has(sig)) return; seen.add(sig); attempts.push({ o, w: c.w.filter(k => (k === 'chips' ? cp.count : k === 'nr' ? sp.count : true)) }); });
     let lastErr;
     for (const a of attempts) {
-      try { await send(build(a.o)); a.w.forEach(k => { if (k !== 'chips' || cp.count) warnings.push(W[k]); }); return; } catch (e) { lastErr = e; }
+      try { await send(build(a.o)); a.w.forEach(k => warnings.push(W[k])); return; } catch (e) { lastErr = e; }
     }
     throw lastErr;
   }
-
 
   /* ---------- private drafts in the counselor's own Drive (never shared, never downloaded to the computer) ---------- */
   const FOLDER_NAME = 'WA Course Planner Drafts';
@@ -300,6 +334,75 @@
     const tok = await validToken();
     await api('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?fields=id', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) }, tok);
     if (G.draftId === id) G.draftId = null;
+  };
+
+  /* ---------- plan copy + "Refresh tracker from Doc" ---------- */
+  const DOCS = 'https://docs.googleapis.com/v1/documents/', DRIVE = 'https://www.googleapis.com/drive/v3/files/';
+  /** Saves a private copy of the submitted plan in the counselor's drafts folder and links it to the Doc. */
+  G.savePlanCopy = async function (docId, copy, name) {
+    if (!G.user) throw new Error('Please sign in with Google first.');
+    const tok = await validToken(), folder = await draftFolder(tok);
+    const m = multipart({ name: 'PLAN COPY \u2014 ' + name, parents: [folder], mimeType: 'application/json', appProperties: { waPlanCopy: '1', waDoc: docId } }, JSON.stringify(copy));
+    const f = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + m.b }, body: m.body }, tok);
+    await api(DRIVE + encodeURIComponent(docId) + '?fields=id', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appProperties: { waDoc: '1', waCopy: f.id } }) }, tok);
+    return f.id;
+  };
+  G.listPlanDocs = async function () {
+    if (!G.user) throw new Error('Please sign in with Google first.');
+    const tok = await validToken();
+    const q = "appProperties has { key='waDoc' and value='1' } and mimeType='application/vnd.google-apps.document' and trashed=false";
+    const r = await api('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&orderBy=modifiedTime%20desc&pageSize=50&fields=files(id,name,modifiedTime)', {}, tok);
+    return (r && r.files) || [];
+  };
+  const tabOf = doc => (doc.tabs && doc.tabs[0] && doc.tabs[0].documentTab) || doc;
+  const getTabDoc = (id, tok) => api(DOCS + encodeURIComponent(id) + '?includeTabsContent=true', {}, tok);
+  function readChips(tab) {
+    const defs = tab.dropdownDefinitions || {}, out = [];
+    walk(tab.body && tab.body.content, n => {
+      if (n.type === 't') return;
+      (n.el.paragraph.elements || []).forEach(pe => {
+        const dd = pe.dropdown; if (!dd) return;
+        const def = defs[dd.dropdownDefinitionId], props = def && (def.dropdownDefinitionProperties || def), opt = props && (props.options || []).find(o => o.optionId === dd.selectedOptionId);
+        out.push({ key: String(dd.dropdownDefinitionId || '').replace(/^kix\./, ''), label: opt ? opt.displayValue : null });
+      });
+    });
+    return out;
+  }
+  function cellAt(tab, idx) {
+    let hit = null;
+    ((tab.body && tab.body.content) || []).forEach(el => { if (!el.table) return; (el.table.tableRows || []).forEach((row, ri) => (row.tableCells || []).forEach((cell, ci) => { if (idx >= cell.startIndex && idx < cell.endIndex) hit = { start: el.startIndex, r: ri, c: ci }; })); });
+    return hit;
+  }
+  /** Reads the dropdown choices from the Doc, lets compute() recalculate, then rewrites the tracker text in place. */
+  G.refreshFromDoc = async function (docId, compute) {
+    if (!G.user) throw new Error('Please sign in with Google first.');
+    const tok = await validToken();
+    const meta = await api(DRIVE + encodeURIComponent(docId) + '?fields=id,name,appProperties', {}, tok);
+    const copyId = meta.appProperties && meta.appProperties.waCopy;
+    if (!copyId) { const e = new Error('This Doc was created before the Refresh feature, so there is no saved plan to refresh from.'); e.nocopy = true; throw e; }
+    const copy = await api(DRIVE + encodeURIComponent(copyId) + '?alt=media', {}, tok);
+    let doc = await getTabDoc(docId, tok), tab = tabOf(doc);
+    const ranges = tab.namedRanges || {};
+    if (!Object.keys(ranges).some(k => k.indexOf('wa-t-') === 0)) { const e = new Error('The tracker areas could not be found in this Doc (they may have been deleted), so it can’t be refreshed.'); e.nocopy = true; throw e; }
+    const out = compute(copy, readChips(tab)), slots = out.slots || {};
+    // 1) rewrite each tracker text (latest position first so earlier positions stay valid)
+    const ops = [];
+    Object.keys(slots).forEach(name => { const e = ranges[name]; if (e) (e.namedRanges || []).forEach(nr => { const r = (nr.ranges || [])[0]; if (r) ops.push({ name, s: r.startIndex, e: r.endIndex, text: slots[name].text }); }); });
+    ops.sort((a, b) => b.s - a.s);
+    const reqs = Array.from(new Set(ops.map(o => o.name))).map(name => ({ deleteNamedRange: { name } }));
+    ops.forEach(o => { reqs.push({ deleteContentRange: { range: { startIndex: o.s, endIndex: o.e } } }, { insertText: { location: { index: o.s }, text: o.text } }, { createNamedRange: { name: o.name, range: { startIndex: o.s, endIndex: o.s + o.text.length } } }); });
+    if (reqs.length) await api(DOCS + encodeURIComponent(docId) + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: reqs, writeControl: { requiredRevisionId: doc.revisionId } }) }, tok);
+    // 2) colors: text color for each item, and the shaded background of each tracker box
+    doc = await getTabDoc(docId, tok); tab = tabOf(doc); const style = [], rgb = h => ({ red: parseInt(h.slice(1, 3), 16) / 255, green: parseInt(h.slice(3, 5), 16) / 255, blue: parseInt(h.slice(5, 7), 16) / 255 });
+    Object.keys(slots).forEach(name => { const sl = slots[name], e = (tab.namedRanges || {})[name]; if (!e) return;
+      (e.namedRanges || []).forEach(nr => (nr.ranges || []).forEach(r => {
+        if (sl.fg) style.push({ updateTextStyle: { range: { startIndex: r.startIndex, endIndex: r.endIndex }, textStyle: { foregroundColor: { color: { rgbColor: rgb(sl.fg) } } }, fields: 'foregroundColor' } });
+        if (sl.cell && sl.bg) { const c = cellAt(tab, r.startIndex); if (c) style.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: { index: c.start }, rowIndex: c.r, columnIndex: c.c }, rowSpan: 1, columnSpan: 1 }, tableCellStyle: { backgroundColor: { color: { rgbColor: rgb(sl.bg) } } }, fields: 'backgroundColor' } }); }
+      })); });
+    if (style.length) await api(DOCS + encodeURIComponent(docId) + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: style }) }, tok);
+    // 3) keep the saved plan copy in step with the Doc
+    if (out.copy) await api('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(copyId) + '?uploadType=media', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(out.copy) }, tok);
+    return { name: meta.name, url: 'https://docs.google.com/document/d/' + docId + '/edit', updated: ops.length, summary: out.summary || {} };
   };
 
   WA.google = G;
