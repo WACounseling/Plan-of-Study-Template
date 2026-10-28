@@ -6,7 +6,7 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const SKEY = 'wa_planner_v1';
-  const BUILD = '2026.10.19-o';
+  const BUILD = '2026.10.19-p';
   // every file must match the version this app.js expects; otherwise some files on the site are stale
   const EXPECT = { 'catalog.js': '6', 'cocurriculars.js': '1', 'engine.js': '4', 'reference.js': '4', 'distinctions.js': '3', 'planio.js': '4', 'combo.js': '1', 'distui.js': '2', 'sound.js': '1', 'docbuilder.js': '13', 'google.js': '13' };
   const NEEDS = ['signIn', 'signOut', 'createPlanDoc', 'ensureToken', 'expire', 'saveDraft', 'listDrafts', 'loadDraft', 'trashDraft', 'savePlanCopy', 'listPlanDocs', 'refreshFromDoc'];
@@ -428,7 +428,7 @@
     setDot('grades', bad ? 'err' : done === 4 ? 'done' : sel ? 'part' : 'none', bad ? 'Some grades need fixes' : done === 4 ? 'All four grades planned' : sel ? 'In progress' : 'Not started');
     const hasCoc = state.cocurr.some(c => c.name);
     setDot('coc', hasCoc ? 'done' : 'none', hasCoc ? 'Activities entered' : 'Optional — nothing entered');
-    setDot('college', (state.info.colleges.trim() || state.info.major.trim()) ? 'done' : 'none', (state.info.colleges.trim() || state.info.major.trim()) ? 'Interests entered' : 'Optional — nothing entered');
+    { const hasInt = !!(String(state.info.colleges || '').trim() || String(state.info.major || '').trim()); setDot('college', hasInt ? 'done' : 'none', hasInt ? 'Interests entered' : 'Optional — nothing entered'); }
     setDot('notes', state.info.notes.trim() ? 'done' : 'none', state.info.notes.trim() ? 'Notes entered' : 'Optional — no notes');
     const t = P.tracker, n = t.areas.filter(a => a.met).length, b = $('#snTrk');
     b.textContent = n + '/' + t.areas.length; b.className = 'sn-badge ' + (n === t.areas.length ? 's-done' : n ? 's-part' : 's-err');
@@ -776,21 +776,27 @@
     $('#ovOn').checked = !!state.override.on; $('#ovReason').value = state.override.reason || '';
     update(false);
   }
+  function showInitProblem(list) {
+    let el = document.getElementById('initwarn');
+    if (!el) { el = document.createElement('div'); el.id = 'initwarn'; el.className = 'syncwarn'; el.setAttribute('role', 'alert'); document.body.insertBefore(el, document.body.firstChild); }
+    el.innerHTML = '<b>The planner hit a problem while starting, so some features may not work.</b> This almost always means some site files are from an older update: upload <b>every file</b> from the latest update (index.html and the .js files together), wait a minute, then hard-refresh (Ctrl+Shift+R). <small>Details: ' + list.map(esc).join(' · ') + '</small>';
+  }
   function init() {
-    load(); initBindings(); buildGrades(); if (WA.combo) WA.combo.enhanceAll(); renderRef(); renderDisclaimer();
-    const fp = document.querySelector('.foot p'); if (fp) fp.appendChild(h('span', { class: 'build', text: ' Build ' + BUILD + '.' }));
-    $('#addTransfer').addEventListener('click', () => { state.prior.transfers.push({ title: '', equiv: '', area: 'elec', cr: 1, when: '9', lang: 'fr' }); renderTransfers(); update(true); });
-    $('#addCoc').addEventListener('click', () => { state.cocurr.push({ name: '', status: 'active' }); renderCoc(); });
-    $('#submitBtn').addEventListener('click', submit);
-    $('#saveDraft').addEventListener('click', saveDraft);
-    $('#loadDraft').addEventListener('click', openDrafts);
-    $('#resetAll').addEventListener('click', reset);
-    $('#refreshBtn').addEventListener('click', refreshDoc);
-    $('#importFamily').addEventListener('change', e => { if (e.target.files[0]) importFamilyFile(e.target.files[0]); e.target.value = ''; });
-    $('#ovOn').addEventListener('change', e => { state.override.on = e.target.checked; save(); });
-    $('#ovReason').addEventListener('input', e => { state.override.reason = e.target.value; save(); });
-    ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => $('[data-bind="' + p + '"]').addEventListener('input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
-    fullRender(); initAuth(); initNav(); initSound(); showSync();
+    const problems = [];
+    const step = (name, fn) => { try { fn(); } catch (e) { problems.push(name + ' — ' + ((e && e.message) || e)); try { console.error('[planner] ' + name, e); } catch (x) { /* ignore */ } } };
+    const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); else problems.push('the page is missing ' + sel + ' (index.html is older than the other files)'); };
+    step('file check', showSync);        // first: name any out-of-date files
+    step('sign-in', initAuth);           // sign-in is wired up before anything that could fail
+    step('saved plan', load); step('form fields', initBindings); step('grade cards', buildGrades); step('search boxes', () => { if (WA.combo) WA.combo.enhanceAll(); }); step('reference', () => { renderRef(); renderDisclaimer(); });
+    step('footer', () => { const fp = document.querySelector('.foot p'); if (fp) fp.appendChild(h('span', { class: 'build', text: ' Build ' + BUILD + '.' })); });
+    on('#addTransfer', 'click', () => { state.prior.transfers.push({ title: '', equiv: '', area: 'elec', cr: 1, when: '9', lang: 'fr' }); renderTransfers(); update(true); });
+    on('#addCoc', 'click', () => { state.cocurr.push({ name: '', status: 'active' }); renderCoc(); });
+    on('#submitBtn', 'click', submit); on('#saveDraft', 'click', saveDraft); on('#loadDraft', 'click', openDrafts); on('#resetAll', 'click', reset); on('#refreshBtn', 'click', refreshDoc);
+    on('#importFamily', 'change', e => { if (e.target.files[0]) importFamilyFile(e.target.files[0]); e.target.value = ''; });
+    on('#ovOn', 'change', e => { state.override.on = e.target.checked; save(); }); on('#ovReason', 'input', e => { state.override.reason = e.target.value; save(); });
+    ['info.studentName', 'info.studentEmail', 'info.counselorName', 'info.date'].forEach(p => on('[data-bind="' + p + '"]', 'input', e => { e.target.classList.remove('bad'); renderReadiness(E.problems(state)); }));
+    step('plan display', fullRender); step('sign-in display', renderAuth); step('navigation', initNav); step('sound', initSound); step('file check', showSync);
+    if (problems.length) showInitProblem(problems);
   }
   window.WA.app = { refreshCompute, normState, modelFor, celebrate: a => { celQueue.push(a); runCel(); }, chipLabel, syncProblems, showSync, BUILD, buildPayload: () => buildPayload(E.problems(state)), getState: () => state, setState: s => { mergeState(s); fullRender(); }, update };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
