@@ -1,420 +1,297 @@
-/* Google sign-in (Google Identity Services) + Drive / Docs API calls.
- * The counselor signs in with their own account; the Doc is created in THEIR Drive (they are the owner),
- * then shared with the student as a view-only reader. Nothing passes through any other server.
- * Scope: drive.file only (the app can touch only files it creates). */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four-Year Course Planner · Woodward Academy Upper School Counseling</title>
+<meta name="description" content="Counselor tool for building a four-year Upper School course plan that meets Woodward Academy and State of Georgia graduation requirements.">
+<script>
+/* Safety net: if the planner cannot start (a file is missing or broken), say so on the page instead of failing silently. */
 (function () {
-  'use strict';
-  const WA = window.WA = window.WA || {};
-  (WA.versions = WA.versions || {})['google.js'] = '14';
-  const CFG = window.WA_CONFIG || {};
-  const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
-  const SCOPE = 'openid email profile ' + DRIVE_FILE;
-
-  let tokenClient = null, pending = null, token = null, expiresAt = 0;
-  const G = { user: null, onChange: () => {} };
-
-  const configured = () => !!CFG.GOOGLE_CLIENT_ID;
-  const gisReady = () => !!(window.google && window.google.accounts && window.google.accounts.oauth2);
-  G.configured = configured;
-
-  function init() {
-    if (tokenClient) return true;
-    if (!configured() || !gisReady()) return false;
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: CFG.GOOGLE_CLIENT_ID, scope: SCOPE, hd: CFG.COUNSELOR_EMAIL_DOMAIN || undefined,
-      callback: r => {
-        if (!pending) return; const p = pending; pending = null;
-        if (r.error) return p.rej(new Error(r.error_description || r.error));
-        const o = window.google.accounts.oauth2;
-        if (o.hasGrantedAllScopes && !o.hasGrantedAllScopes(r, DRIVE_FILE)) return p.rej(new Error('Please allow access to create Google Docs in your Drive, then sign in again.'));
-        if (!r.access_token) return p.rej(new Error('Google did not return a sign-in token. Please click “Sign in with Google” again.'));
-        token = r.access_token; expiresAt = Date.now() + (Number(r.expires_in || 3600) - 90) * 1000; p.res(token);
-      },
-      error_callback: e => { if (pending) { const p = pending; pending = null; p.rej(new Error(e && e.type === 'popup_closed' ? 'The Google sign-in window was closed.' : (e && e.message) || 'Google sign-in was blocked. Allow pop-ups for this site and try again.')); } }
-    });
-    return true;
+  var failed = [], errors = []; window.__waBoot = { failed: failed, errors: errors };
+  window.addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t.tagName === 'SCRIPT') { var src = String(t.getAttribute('src') || ''); failed.push(/accounts\.google\.com/.test(src) ? 'Google sign-in library (accounts.google.com)' : src.split('?')[0].split('/').pop()); }
+    else if (e.message) errors.push(e.message + (e.filename ? ' (' + String(e.filename).split('?')[0].split('/').pop() + ':' + e.lineno + ')' : ''));
+  }, true);
+  function message(started) {
+    var onlyGoogle = started && failed.length === 1 && /Google sign-in library/.test(failed[0]);
+    if (onlyGoogle) return 'Google’s sign-in library did not load, so “Sign in with Google” cannot work. Something is blocking accounts.google.com (a browser extension, school network filter or no connection). Try another network or browser, or ask IT to allow accounts.google.com.';
+    return 'The planner could not finish starting' + (failed.length ? '. These files did not load: ' + failed.join(', ') : '') + (errors.length ? '. Error' + (errors.length > 1 ? 's' : '') + ': ' + errors.slice(0, 3).join(' · ') : (!failed.length ? '. (No details were captured: press F12 and read the red error in the Console tab.)' : '')) + '. This usually means some site files are from an older update: upload every file from the latest update, wait a minute, then press Ctrl+Shift+R.';
   }
-  const HKEY = 'wa_signin_hint';
-  let memHint = '';
-  const getHint = () => { try { return sessionStorage.getItem(HKEY) || memHint; } catch (e) { return memHint; } };
-  const setHint = v => { memHint = v || ''; try { if (v) sessionStorage.setItem(HKEY, v); else sessionStorage.removeItem(HKEY); } catch (e) { /* storage blocked: memory only */ } };
-  function request(prompt, hint) {
-    return new Promise((res, rej) => {
-      if (!configured()) return rej(new Error('Google sign-in is not configured yet. An administrator must add GOOGLE_CLIENT_ID in assets/js/config.js.'));
-      if (!init()) return rej(new Error('Google sign-in is still loading. Wait a moment and try again (or check your connection).'));
-      pending = { res, rej }; tokenClient.requestAccessToken(hint ? { prompt, hint } : { prompt });
-    });
+  function show() {
+    var started = !!(window.WA && window.WA.app); if (started && !failed.length) return;
+    var d = document.createElement('div'); d.id = 'bootwarn'; d.setAttribute('role', 'alert'); d.style.cssText = 'background:#fbe4e3;border-bottom:3px solid #df6460;color:#5a1512;padding:10px 20px;font:13px/1.45 Arial,sans-serif;text-align:center;position:sticky;top:0;z-index:99';
+    d.textContent = message(started); document.body.insertBefore(d, document.body.firstChild);
   }
-
-  const EXPIRED = 'Your Google sign-in has expired or was not accepted (this happens after about an hour). Please click “Sign in with Google” again in Step 1, then retry. Your plan is still here.';
-  async function api(url, opts, tok) {
-    const r = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization: 'Bearer ' + (tok || token) }, (opts && opts.headers) || {}) }));
-    let data = null; const text = await r.text(); try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text }; }
-    if (!r.ok) {
-      if (r.status === 401) { const err = new Error(EXPIRED); err.status = 401; err.auth = true; G.expire(); throw err; }
-      const m = (data && data.error && (data.error.message || data.error)) || r.statusText; const err = new Error(String(m)); err.status = r.status; throw err;
-    }
-    return data;
-  }
-  // forget the (expired) token and show the signed-out state, without revoking anything
-  G.expire = function () { token = null; expiresAt = 0; const had = !!G.user; G.user = null; G.draftId = null; if (had) G.onChange(null); };
-  // call at the start of a button click so a needed refresh pop-up is allowed by the browser
-  G.ensureToken = async function () { if (!G.user) throw new Error('Please sign in with Google first.'); await validToken(); };
-
-  G.signIn = async function () {
-    const hint = getHint();
-    const t = await request(hint ? '' : 'select_account', hint); // after the first sign-in, skip the account chooser
-    const u = await api('https://www.googleapis.com/oauth2/v3/userinfo', {}, t);
-    const email = String(u.email || '').toLowerCase(), dom = String(CFG.COUNSELOR_EMAIL_DOMAIN || '').toLowerCase();
-    if (u.email_verified === false) throw new Error('That Google account\u2019s email is not verified.');
-    if (dom && !email.endsWith('@' + dom)) {
-      try { window.google.accounts.oauth2.revoke(t, () => {}); } catch (e) { /* ignore */ }
-      token = null; throw new Error('Please sign in with your @' + dom + ' account (you used ' + email + ').');
-    }
-    G.user = { email, name: u.name || email, picture: u.picture || '' }; setHint(email);
-    G.onChange(G.user); return G.user;
-  };
-  G.signOut = function () {
-    try { if (token && gisReady()) window.google.accounts.oauth2.revoke(token, () => {}); } catch (e) { /* ignore */ }
-    token = null; expiresAt = 0; G.user = null; G.draftId = null; setHint(''); G.onChange(null);
-  };
-  async function validToken() {
-    if (token && Date.now() < expiresAt) return token;
-    const t = await request('', G.user && G.user.email); // refresh quietly for the same account (may flash a pop-up)
-    return t;
-  }
-
-  /* ---------- create the Doc in the signed-in counselor's Drive, fix margins, share view-only ---------- */
-  G.createPlanDoc = async function (payload, opts) {
-    if (!G.user) throw new Error('Please sign in with Google first.');
-    const tok = await validToken();
-    const warnings = [];
-    const title = 'Four-Year Course Plan \u2014 ' + payload.student.name + ' (Graduating ' + payload.classOf + ')';
-    const html = WA.docbuilder.buildHtml(payload);
-
-    // 1) upload HTML and let Drive convert it to a Google Doc (owned by the signed-in counselor)
-    const b = 'wa' + Math.random().toString(36).slice(2);
-    const body = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: title, mimeType: 'application/vnd.google-apps.document' }) +
-      '\r\n--' + b + '\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n' + html + '\r\n--' + b + '--';
-    const file = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body }, tok);
-    const id = file.id;
-    const url = 'https://docs.google.com/document/d/' + id + '/edit';
-    const result = { id, url, warnings };
-
-    // 2) 0.5" margins, page-break and logo
-    try { await finishDoc(id, tok, opts && opts.logoUrl, warnings, payload.chipDefs); }
-    catch (e) { warnings.push('The document was created, but margins/page break could not be applied automatically (' + e.message + '). Set Page setup to 0.5" margins and add a page break before the reference section.'); }
-
-    // 3) share with the student, view only
-    try {
-      const msg = payload.counselor.name + ' has shared your four-year course plan with you (projected graduation: Spring ' + payload.classOf + '). You have view-only access.';
-      await api('https://www.googleapis.com/drive/v3/files/' + id + '/permissions?sendNotificationEmail=true&emailMessage=' + encodeURIComponent(msg),
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'user', emailAddress: payload.student.email }) }, tok);
-      result.shared = true;
-    } catch (e) { result.shared = false; warnings.push('The document was created in your Drive but could not be shared with ' + payload.student.email + ' (' + e.message + '). Share it manually as Viewer.'); }
-    return result;
-  };
-
-  /* ---- walk the real document structure (including tables) so every index comes from Google, not guesses ---- */
-  function walk(content, visit, inTable) {
-    let first = true;
-    (content || []).forEach(el => {
-      if (el.paragraph) { visit({ type: 'p', el, inTable: !!inTable, firstInCell: !!inTable && first }); first = false; }
-      else if (el.table) {
-        first = false;
-        const tb = el.table, info = { type: 't', el, rows: tb.rows, cols: tb.columns, start: el.startIndex };
-        visit(info);
-        (tb.tableRows || []).forEach(r => (r.tableCells || []).forEach(c => walk(c.content, visit, true)));
-      }
-    });
-  }
-  function scan(doc) {
-    const out = { tables: [], paras: [], tokens: {}, pbs: [], dd: [], ss: [], se: [], cb: [] };
-    walk(doc.body && doc.body.content, n => {
-      if (n.type === 't') { out.tables.push(n); return; }
-      out.paras.push(n);
-      (n.el.paragraph.elements || []).forEach(pe => {
-        const c = pe.textRun && pe.textRun.content; if (!c) return;
-        ['[[LOGO]]'].forEach(tk => { const i = c.indexOf(tk); if (i >= 0 && out.tokens[tk] == null) out.tokens[tk] = pe.startIndex + i; });
-        const pbi = c.indexOf('[[PB]]'); if (pbi >= 0) out.pbs.push(pe.startIndex + pbi);
-        const re = /\[\[DD:([a-z0-9]+)\]\]/g; let m; while ((m = re.exec(c))) out.dd.push({ key: m[1], idx: pe.startIndex + m.index, len: m[0].length });
-        const rs = /\[\[S:([a-z0-9-]+)\]\]/g; let q; while ((q = rs.exec(c))) out.ss.push({ name: q[1], idx: pe.startIndex + q.index, len: q[0].length });
-        const rend = /\[\[\/S\]\]/g; while ((q = rend.exec(c))) out.se.push({ idx: pe.startIndex + q.index, len: q[0].length });
-        const ci = c.indexOf('[[CB]]'); if (ci >= 0) out.cb.push({ idx: pe.startIndex + ci, len: 6, pStart: n.el.startIndex, pEnd: n.el.endIndex });
-      });
-    });
-    return out;
-  }
-  const PT = n => ({ magnitude: n, unit: 'PT' });
-  // expected tables in document order: [columns, column widths in points]
-  // page 1 tables, then (when distinctions were chosen) the page-2 rule + distinctions grid; the last rule + 2-column table are always the eligibility reference
-  const FRONT_SPECS = [
-    [2, [230, 310], 'MIDDLE'],             // header: logo | title (centered vertically)
-    [1, [540]],                            // red rule
-    [4, [78, 150, 112, 200]],              // student / counselor info
-    [5, [54, 121.5, 121.5, 121.5, 121.5]], // four-year grid
-    [5, [108, 108, 108, 108, 108]],        // requirement tracker
-    [2, [270, 270]],                       // cocurriculars
-    [1, [540]],                            // red rule (page 2: college & career interests)
-    [2, [150, 390]],                       // college & career interests: question | response
-    [1, [540]],                            // red rule (distinctions)
-    [2, [270, 270], 'TOP', { dist: true }] // distinctions: two columns, spacer rows between
-  ];
-  const REAR_SPECS = [[1, [540]], [2, [270, 270], 'TOP', { ref: true }]];   // red rule + eligibility reference columns (last page)
-  function assignSpecs(tables) {
-    const n = tables.length, rear = n >= 2 && tables[n - 1].cols === 2 && tables[n - 2].cols === 1 ? 2 : 0, map = new Map(); let si = 0;
-    tables.slice(0, n - rear).forEach(t => { let k = si; while (k < FRONT_SPECS.length && FRONT_SPECS[k][0] !== t.cols) k++; if (k >= FRONT_SPECS.length) return; si = k + 1; map.set(t, FRONT_SPECS[k]); });
-    if (rear) { map.set(tables[n - 2], REAR_SPECS[0]); map.set(tables[n - 1], REAR_SPECS[1]); }
-    return map;
-  }
-  function layoutRequests(sc) {
-    const r = [], used = [], specs = assignSpecs(sc.tables);
-    let refRange = null;
-    sc.tables.forEach(t => {
-      const spec = specs.get(t); if (!spec) return;
-      const widths = spec[1], isRule = t.cols === 1, align = spec[2] || 'TOP', flags = spec[3] || {};
-      const loc = { index: t.start };
-      widths.forEach((w, ci) => r.push({ updateTableColumnProperties: { tableStartLocation: loc, columnIndices: [ci], tableColumnProperties: { widthType: 'FIXED_WIDTH', width: PT(w) }, fields: 'widthType,width' } }));
-      r.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: loc, rowIndex: 0, columnIndex: 0 }, rowSpan: t.rows, columnSpan: t.cols },
-        tableCellStyle: isRule ? { paddingTop: PT(0), paddingBottom: PT(0), paddingLeft: PT(0), paddingRight: PT(0), contentAlignment: 'TOP' } : { paddingTop: PT(3), paddingBottom: PT(3), paddingLeft: PT(4), paddingRight: PT(4), contentAlignment: align },
-        fields: 'paddingTop,paddingBottom,paddingLeft,paddingRight,contentAlignment' } });
-      if (isRule) r.push({ updateTableRowStyle: { tableStartLocation: loc, rowIndices: [0], tableRowStyle: { minRowHeight: PT(3) }, fields: 'minRowHeight' } });
-      if (flags.dist) {   // clear gutter between the two columns, and generous spacer rows between distinctions
-        [0, 1].forEach(ci => r.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: loc, rowIndex: 0, columnIndex: ci }, rowSpan: t.rows, columnSpan: 1 },
-          tableCellStyle: { paddingTop: PT(0), paddingBottom: PT(0), paddingLeft: PT(ci ? 10 : 0), paddingRight: PT(ci ? 0 : 10), contentAlignment: 'TOP' }, fields: 'paddingTop,paddingBottom,paddingLeft,paddingRight,contentAlignment' } }));
-        for (let ri = 1; ri < t.rows; ri += 2) r.push({ updateTableRowStyle: { tableStartLocation: loc, rowIndices: [ri], tableRowStyle: { minRowHeight: PT(16) }, fields: 'minRowHeight' } });
-      }
-      used.push({ t, rule: isRule });
-      if (flags.ref) refRange = { start: t.el.startIndex, end: t.el.endIndex };
-    });
-
-    // tight, uniform paragraph spacing (Docs' default 1.15 spacing otherwise pushes page 1 onto a second page)
-    const last = sc.paras.length ? sc.paras[sc.paras.length - 1].el.endIndex : 2;
-    r.push({ updateParagraphStyle: { range: { startIndex: 1, endIndex: Math.max(2, last - 1) }, paragraphStyle: { lineSpacing: 100, spaceAbove: PT(0), spaceBelow: PT(0) }, fields: 'lineSpacing,spaceAbove,spaceBelow' } });
-    // keep course lines from touching inside grid cells
-    sc.paras.forEach(n => {
-      const pe = n.el.paragraph.elements || [];
-      const text = pe.map(e => (e.textRun && e.textRun.content) || '').join('').replace(/[\s\u00a0]/g, '');
-      const ruleCell = used.some(u => u.rule && n.el.startIndex >= u.t.start && n.el.endIndex <= u.t.el.endIndex);
-      if (ruleCell) r.push({ updateTextStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, textStyle: { fontSize: PT(1) }, fields: 'fontSize' } });
-      else if (!text && !n.inTable) r.push({ updateTextStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, textStyle: { fontSize: PT(3) }, fields: 'fontSize' } });
-      else if (n.inTable && text && !ruleCell) r.push({ updateParagraphStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, paragraphStyle: { spaceBelow: PT(1) }, fields: 'spaceBelow' } });
-      // page 2: a clear gap above every section title (all-caps heading) except the first in each column
-      const raw = pe.map(e => (e.textRun && e.textRun.content) || '').join('').replace(/\n$/, '').trim();
-      const isTitle = raw.length > 3 && /[A-Z]/.test(raw) && raw === raw.toUpperCase();
-      if (refRange && isTitle && !n.firstInCell && n.el.startIndex >= refRange.start && n.el.endIndex <= refRange.end)
-        r.push({ updateParagraphStyle: { range: { startIndex: n.el.startIndex, endIndex: n.el.endIndex }, paragraphStyle: { spaceAbove: PT(10), spaceBelow: PT(2) }, fields: 'spaceAbove,spaceBelow' } });
-    });
-    return r;
-  }
-  /* ---- dropdown chips for course cells (Google Docs API: 2-50 options per dropdown) ---- */
-  const hexRgb = h => ({ red: parseInt(h.slice(1, 3), 16) / 255, green: parseInt(h.slice(3, 5), 16) / 255, blue: parseInt(h.slice(5, 7), 16) / 255 });
-  const OPT_COLORS = { none: ['#f1f4f4', '#6b6b6b'], appr: ['#fdf0d8', '#8a5a00'], norm: ['#e6eef4', '#002e53'] };
-  const optStyle = k => ({ backgroundColor: { color: { rgbColor: hexRgb(OPT_COLORS[k][0]) } }, foregroundColor: { color: { rgbColor: hexRgb(OPT_COLORS[k][1]) } } });
-  const plainLabel = l => (!l || /^— none —$/.test(l)) ? '—' : String(l).replace(/\s*⚑$/, '');
-  function chipPlan(defs, dd) {
-    const creates = [], edits = [], labels = {}, made = {}; let n = 0;
-    dd.forEach(t => {
-      const d = defs && defs[t.key];
-      if (!labels[t.key]) labels[t.key] = d ? plainLabel((function (o) { return o.full || o.label; })(d.options.find(o => o.value === d.selected) || d.options[0] || {})) : '—';
-      if (!d || !Array.isArray(d.options) || d.options.length < 2) return;
-      if (!made[t.key]) {
-        let selectedId = null;
-        const options = d.options.slice(0, 50).map(o => {
-          const id = 'dropdownItem.o' + (n++).toString(36); if (o.value === d.selected) selectedId = id;
-          return { optionId: id, displayValue: String(o.label || o.full || '—').slice(0, 200), textStyle: optStyle(o.value === '' ? 'none' : o.appr ? 'appr' : 'norm') };
-        });
-        made[t.key] = { defId: 'kix.' + t.key, selectedId: selectedId || options[0].optionId };
-        creates.push({ createDropdownDefinition: { dropdownDefinition: { dropdownDefinitionId: made[t.key].defId, dropdownDefinitionProperties: { title: String(d.title || 'Course').slice(0, 200), options } } } });
-      }
-      edits.push({ idx: t.idx, reqs: [{ deleteContentRange: { range: { startIndex: t.idx, endIndex: t.idx + t.len } } }, { insertDropdown: { location: { index: t.idx }, dropdownDefinitionId: made[t.key].defId, selectedOptionId: made[t.key].selectedId } }] });
-    });
-    const keys = Object.keys(labels);
-    return { creates, edits, textFallback: keys.map(k => ({ replaceAllText: { containsText: { text: '[[DD:' + k + ']]', matchCase: true }, replaceText: labels[k] } })), count: edits.length };
-  }
-  /* ---- refreshable text (named ranges) and real checklist boxes ---- */
-  function slotPlan(sc) {
-    const seq = sc.ss.map(x => ({ t: 's', x })).concat(sc.se.map(x => ({ t: 'e', x }))).sort((a, b) => a.x.idx - b.x.idx), pairs = []; let cur = null;
-    seq.forEach(q => { if (q.t === 's') cur = q.x; else if (cur) { pairs.push({ name: cur.name, s: cur, e: q.x }); cur = null; } });
-    const edits = [], names = Array.from(new Set(pairs.map(p => p.name)));
-    pairs.forEach(p => {
-      edits.push({ idx: p.e.idx, reqs: [{ deleteContentRange: { range: { startIndex: p.e.idx, endIndex: p.e.idx + p.e.len } } }] });
-      edits.push({ idx: p.s.idx, reqs: [{ deleteContentRange: { range: { startIndex: p.s.idx, endIndex: p.s.idx + p.s.len } } }, { createNamedRange: { name: p.name, range: { startIndex: p.s.idx, endIndex: p.e.idx - p.s.len } } }] });
-    });
-    sc.cb.forEach(c => edits.push({ idx: c.idx, reqs: [{ deleteContentRange: { range: { startIndex: c.idx, endIndex: c.idx + c.len } } }, { createParagraphBullets: { range: { startIndex: c.pStart, endIndex: c.pEnd - c.len }, bulletPreset: 'BULLET_CHECKBOX' } }] }));
-    const fallback = names.map(n => ({ replaceAllText: { containsText: { text: '[[S:' + n + ']]', matchCase: true }, replaceText: '' } }));
-    if (names.length) fallback.push({ replaceAllText: { containsText: { text: '[[/S]]', matchCase: true }, replaceText: '' } });
-    if (sc.cb.length) fallback.push({ replaceAllText: { containsText: { text: '[[CB]]', matchCase: true }, replaceText: '\u2610 ' } });
-    return { edits, fallback, count: pairs.length + sc.cb.length };
-  }
-  async function finishDoc(id, tok, logoUrl, warnings, chipDefs) {
-    const doc = await api('https://docs.googleapis.com/v1/documents/' + id, {}, tok);
-    const sc = scan(doc); const logo = sc.tokens['[[LOGO]]'];
-    const margins = { updateDocumentStyle: { documentStyle: { marginTop: PT(36), marginBottom: PT(36), marginLeft: PT(36), marginRight: PT(36), pageSize: { width: PT(612), height: PT(792) } }, fields: 'marginTop,marginBottom,marginLeft,marginRight,pageSize' } };
-    let layout = []; try { layout = layoutRequests(sc); } catch (e) { warnings.push('Layout clean-up was skipped (' + e.message + ').'); }
-    const cp = chipPlan(chipDefs, sc.dd), sp = slotPlan(sc);
-    // style requests move no indices, so they go first; edits that change text go last, later-in-document first
-    const build = o => {
-      const edits = [], tail = [];
-      sc.pbs.forEach(pb => edits.push({ idx: pb, reqs: [{ deleteContentRange: { range: { startIndex: pb, endIndex: pb + 6 } } }, { insertPageBreak: { location: { index: pb } } }] }));
-      if (logo != null) {
-        if (o.img && logoUrl) edits.push({ idx: logo, reqs: [{ deleteContentRange: { range: { startIndex: logo, endIndex: logo + 8 } } }, { insertInlineImage: { uri: logoUrl, location: { index: logo }, objectSize: { width: PT(150), height: PT(43) } } }] });
-        else tail.push({ replaceAllText: { containsText: { text: '[[LOGO]]', matchCase: true }, replaceText: 'WOODWARD ACADEMY' } });
-      }
-      if (o.chips) edits.push.apply(edits, cp.edits); else tail.push.apply(tail, cp.textFallback);
-      if (o.nr) edits.push.apply(edits, sp.edits); else tail.push.apply(tail, sp.fallback);
-      edits.sort((a, b) => b.idx - a.idx);
-      const r = [margins];
-      if (o.layout) r.push.apply(r, layout);
-      if (o.chips) r.push.apply(r, cp.creates);
-      edits.forEach(e => r.push.apply(r, e.reqs));
-      return r.concat(tail);
-    };
-    const send = r => api('https://docs.googleapis.com/v1/documents/' + id + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: r }) }, tok);
-    const W = { logo: 'The logo image could not be inserted, so a text wordmark was used.', chips: 'Course dropdowns could not be added, so courses appear as plain text.',
-      nr: 'The “Completed” checkboxes and the Refresh feature could not be added, so tracker items appear as plain text.', layout: 'Table layout clean-up could not be applied; margins, page break and logo were set.' };
-    const combos = [
-      { o: { img: 1, chips: 1, nr: 1, layout: 1 }, w: [] }, { o: { img: 0, chips: 1, nr: 1, layout: 1 }, w: ['logo'] }, { o: { img: 1, chips: 0, nr: 1, layout: 1 }, w: ['chips'] },
-      { o: { img: 1, chips: 1, nr: 0, layout: 1 }, w: ['nr'] }, { o: { img: 1, chips: 0, nr: 0, layout: 1 }, w: ['chips', 'nr'] }, { o: { img: 0, chips: 0, nr: 0, layout: 1 }, w: ['logo', 'chips', 'nr'] },
-      { o: { img: 0, chips: 0, nr: 0, layout: 0 }, w: ['logo', 'chips', 'nr', 'layout'] }
-    ];
-    const seen = new Set(), attempts = [];
-    combos.forEach(c => { const o = { img: !!c.o.img, chips: cp.count ? !!c.o.chips : true, nr: sp.count ? !!c.o.nr : true, layout: !!c.o.layout }, sig = JSON.stringify(o); if (seen.has(sig)) return; seen.add(sig); attempts.push({ o, w: c.w.filter(k => (k === 'chips' ? cp.count : k === 'nr' ? sp.count : true)) }); });
-    let lastErr;
-    for (const a of attempts) {
-      try { await send(build(a.o)); a.w.forEach(k => warnings.push(W[k])); return; } catch (e) { lastErr = e; }
-    }
-    throw lastErr;
-  }
-
-  /* ---------- private drafts in the counselor's own Drive (never shared, never downloaded to the computer) ---------- */
-  const FOLDER_NAME = 'WA Course Planner Drafts';
-  G.draftId = null;
-  async function draftFolder(tok) {
-    const q = "mimeType='application/vnd.google-apps.folder' and name='" + FOLDER_NAME + "' and trashed=false";
-    const r = await api('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id)&pageSize=1', {}, tok);
-    if (r && r.files && r.files[0]) return r.files[0].id;
-    const f = await api('https://www.googleapis.com/drive/v3/files?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }) }, tok);
-    return f.id;
-  }
-  function multipart(meta, content, type) {
-    const b = 'wa' + Math.random().toString(36).slice(2);
-    return { b, body: '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + b + '\r\nContent-Type: ' + (type || 'application/json') + '; charset=UTF-8\r\n\r\n' + content + '\r\n--' + b + '--' };
-  }
-
-  G.saveDraft = async function (state, name) {
-    if (!G.user) throw new Error('Please sign in with Google first.');
-    const tok = await validToken(); const json = JSON.stringify(state);
-    if (G.draftId) {
-      try {
-        const m = multipart({ name }, json);
-        const f = await api('https://www.googleapis.com/upload/drive/v3/files/' + G.draftId + '?uploadType=multipart&fields=id,name', { method: 'PATCH', headers: { 'Content-Type': 'multipart/related; boundary=' + m.b }, body: m.body }, tok);
-        return { id: f.id, name: f.name || name, updated: true };
-      } catch (e) { if (e.status !== 404 && e.status !== 403) throw e; G.draftId = null; /* file was deleted — save a new one */ }
-    }
-    const folder = await draftFolder(tok);
-    const m = multipart({ name, parents: [folder], mimeType: 'application/json', appProperties: { waDraft: '1' } }, json);
-    const f = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + m.b }, body: m.body }, tok);
-    G.draftId = f.id; return { id: f.id, name: f.name || name, updated: false };
-  };
-  G.listDrafts = async function () {
-    if (!G.user) throw new Error('Please sign in with Google first.');
-    const tok = await validToken();
-    const q = "appProperties has { key='waDraft' and value='1' } and trashed=false";
-    const r = await api('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&orderBy=modifiedTime%20desc&pageSize=50&fields=files(id,name,modifiedTime)', {}, tok);
-    return (r && r.files) || [];
-  };
-  G.loadDraft = async function (id) {
-    const tok = await validToken();
-    const data = await api('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media', {}, tok);
-    if (data && data.format === 'wa-placement') throw new Error('This is an older encrypted .placement file from a test version and can no longer be opened. Please delete it from the WA Course Planner Drafts folder.');
-    G.draftId = id; return data;
-  };
-  G.trashDraft = async function (id) {
-    const tok = await validToken();
-    await api('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?fields=id', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) }, tok);
-    if (G.draftId === id) G.draftId = null;
-  };
-
-  /* ---------- plan copy + "Refresh tracker from Doc" ---------- */
-  const DOCS = 'https://docs.googleapis.com/v1/documents/', DRIVE = 'https://www.googleapis.com/drive/v3/files/';
-  /** Saves a private copy of the submitted plan in the counselor's drafts folder and links it to the Doc. */
-  G.savePlanCopy = async function (docId, copy, name) {
-    if (!G.user) throw new Error('Please sign in with Google first.');
-    const tok = await validToken(), folder = await draftFolder(tok);
-    const m = multipart({ name: 'PLAN COPY \u2014 ' + name, parents: [folder], mimeType: 'application/json', appProperties: { waPlanCopy: '1', waDoc: docId } }, JSON.stringify(copy));
-    const f = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + m.b }, body: m.body }, tok);
-    await api(DRIVE + encodeURIComponent(docId) + '?fields=id', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appProperties: { waDoc: '1', waCopy: f.id } }) }, tok);
-    return f.id;
-  };
-  G.listPlanDocs = async function () {
-    if (!G.user) throw new Error('Please sign in with Google first.');
-    const tok = await validToken();
-    const q = "appProperties has { key='waDoc' and value='1' } and mimeType='application/vnd.google-apps.document' and trashed=false";
-    const r = await api('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&orderBy=modifiedTime%20desc&pageSize=50&fields=files(id,name,modifiedTime)', {}, tok);
-    return (r && r.files) || [];
-  };
-  const tabOf = doc => (doc.tabs && doc.tabs[0] && doc.tabs[0].documentTab) || doc;
-  const getTabDoc = (id, tok) => api(DOCS + encodeURIComponent(id) + '?includeTabsContent=true', {}, tok);
-  function readChips(tab) {
-    const defs = tab.dropdownDefinitions || {}, chips = [], kinds = new Set();
-    walk(tab.body && tab.body.content, n => {
-      if (n.type === 't') return;
-      (n.el.paragraph.elements || []).forEach(pe => {
-        Object.keys(pe).forEach(k => { if (!/^(startIndex|endIndex|textRun)$/.test(k)) kinds.add(k); });
-        const dd = pe.dropdown || Object.keys(pe).map(k => (/dropdown/i.test(k) ? pe[k] : null)).find(x => x && typeof x === 'object' && (x.dropdownDefinitionId || x.definitionId));
-        if (!dd) return;
-        const id = dd.dropdownDefinitionId || dd.definitionId, sel = dd.selectedOptionId || dd.optionId, def = defs[id], props = def && (def.dropdownDefinitionProperties || def);
-        const opt = ((props && props.options) || []).find(o => (o.optionId || o.id) === sel);
-        chips.push({ key: String(id || '').replace(/^kix\./, ''), label: opt ? (opt.displayValue || opt.text || opt.label || null) : null });
-      });
-    });
-    return { chips, kinds: Array.from(kinds) };
-  }
-  function textBetween(tab, s, e) {
-    let out = '';
-    walk(tab.body && tab.body.content, n => { if (n.type === 't') return; (n.el.paragraph.elements || []).forEach(pe => { const c = pe.textRun && pe.textRun.content; if (c == null) return; const a = Math.max(s, pe.startIndex), b = Math.min(e, pe.endIndex); if (b > a) out += c.slice(a - pe.startIndex, b - pe.startIndex); }); });
-    return out;
-  }
-  function cellAt(tab, idx) {
-    let hit = null;
-    ((tab.body && tab.body.content) || []).forEach(el => { if (!el.table) return; (el.table.tableRows || []).forEach((row, ri) => (row.tableCells || []).forEach((cell, ci) => { if (idx >= cell.startIndex && idx < cell.endIndex) hit = { start: el.startIndex, r: ri, c: ci }; })); });
-    return hit;
-  }
-  /** Reads the dropdown choices from the Doc, lets compute() recalculate, then rewrites the tracker text in place. */
-  G.refreshFromDoc = async function (docId, compute) {
-    if (!G.user) throw new Error('Please sign in with Google first.');
-    const tok = await validToken();
-    const meta = await api(DRIVE + encodeURIComponent(docId) + '?fields=id,name,appProperties', {}, tok);
-    const copyId = meta.appProperties && meta.appProperties.waCopy;
-    if (!copyId) { const e = new Error('This Doc was created before the Refresh feature, so there is no saved plan to refresh from.'); e.nocopy = true; throw e; }
-    const copy = await api(DRIVE + encodeURIComponent(copyId) + '?alt=media', {}, tok);
-    let doc = await getTabDoc(docId, tok), tab = tabOf(doc);
-    const ranges = tab.namedRanges || {};
-    if (!Object.keys(ranges).some(k => k.indexOf('wa-t-') === 0)) { const e = new Error('The tracker areas could not be found in this Doc (they may have been deleted), so it can’t be refreshed.'); e.nocopy = true; throw e; }
-    const rc = readChips(tab);
-    if (!rc.chips.length) { const e = new Error('No dropdown choices could be read from this Doc, so nothing was changed. (Element types found in the Doc: ' + (rc.kinds.join(', ') || 'text only') + '.)'); e.nochips = true; throw e; }
-    const out = compute(copy, rc.chips), slots = out.slots || {};
-    // 1) rewrite each tracker text (latest position first so earlier positions stay valid)
-    const ops = [];
-    Object.keys(slots).forEach(name => { const e = ranges[name]; if (e) (e.namedRanges || []).forEach(nr => { const r = (nr.ranges || [])[0]; if (r) ops.push({ name, s: r.startIndex, e: r.endIndex, text: slots[name].text }); }); });
-    ops.sort((a, b) => b.s - a.s);
-    const diffs = ops.map(o => ({ name: o.name, before: textBetween(tab, o.s, o.e), after: o.text })).filter(x => x.before !== x.after);
-    const reqs = Array.from(new Set(ops.map(o => o.name))).map(name => ({ deleteNamedRange: { name } }));
-    ops.forEach(o => { reqs.push({ deleteContentRange: { range: { startIndex: o.s, endIndex: o.e } } }, { insertText: { location: { index: o.s }, text: o.text } }, { createNamedRange: { name: o.name, range: { startIndex: o.s, endIndex: o.s + o.text.length } } }); });
-    if (reqs.length) await api(DOCS + encodeURIComponent(docId) + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: reqs, writeControl: { requiredRevisionId: doc.revisionId } }) }, tok);
-    // 2) colors: text color for each item, and the shaded background of each tracker box
-    doc = await getTabDoc(docId, tok); tab = tabOf(doc); const style = [], rgb = h => ({ red: parseInt(h.slice(1, 3), 16) / 255, green: parseInt(h.slice(3, 5), 16) / 255, blue: parseInt(h.slice(5, 7), 16) / 255 });
-    Object.keys(slots).forEach(name => { const sl = slots[name], e = (tab.namedRanges || {})[name]; if (!e) return;
-      (e.namedRanges || []).forEach(nr => (nr.ranges || []).forEach(r => {
-        if (sl.fg) style.push({ updateTextStyle: { range: { startIndex: r.startIndex, endIndex: r.endIndex }, textStyle: { foregroundColor: { color: { rgbColor: rgb(sl.fg) } } }, fields: 'foregroundColor' } });
-        if (sl.cell && sl.bg) { const c = cellAt(tab, r.startIndex); if (c) style.push({ updateTableCellStyle: { tableRange: { tableCellLocation: { tableStartLocation: { index: c.start }, rowIndex: c.r, columnIndex: c.c }, rowSpan: 1, columnSpan: 1 }, tableCellStyle: { backgroundColor: { color: { rgbColor: rgb(sl.bg) } } }, fields: 'backgroundColor' } }); }
-      })); });
-    if (style.length) await api(DOCS + encodeURIComponent(docId) + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: style }) }, tok);
-    // 3) keep the saved plan copy in step with the Doc
-    if (out.copy) await api('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(copyId) + '?uploadType=media', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(out.copy) }, tok);
-    return { name: meta.name, url: 'https://docs.google.com/document/d/' + docId + '/edit', updated: ops.length, summary: out.summary || {}, diffs, chipsRead: rc.chips.length, kinds: rc.kinds };
-  };
-
-  WA.google = G;
+  // clicking “Sign in with Google” while the planner is not running explains why, right away
+  document.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('#gsiBtn') : null; if (!b || (window.WA && window.WA.app)) return;
+    var er = document.getElementById('signinErr'); if (er) { er.textContent = message(false); er.hidden = false; }
+  });
+  window.addEventListener('load', function () { setTimeout(show, 1200); });
 })();
+</script>
+<style>.signin-msg{margin-top:8px;padding:8px 12px;background:#e6eef4;border-left:4px solid #4c768e;border-radius:4px;font-size:12.5px}.signin-help{margin-top:8px;font-size:12px;color:#636363}.signin-help summary{cursor:pointer;font-weight:600}.signin-diag{margin-top:6px;padding:8px 12px;background:#f1f4f4;border-radius:6px;font-family:Consolas,monospace;font-size:11.5px;line-height:1.5;word-break:break-word}</style>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%239d2235'/%3E%3Ctext x='32' y='43' font-family='Georgia,serif' font-size='30' font-weight='700' fill='white' text-anchor='middle'%3EWA%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css?v=o">
+</head>
+<body>
+<a class="skip" href="#main">Skip to planner</a>
+
+<header class="site-head">
+  <div class="wrap head-in">
+    <img class="wordmark" src="assets/img/wordmark-red.png" alt="Woodward Academy">
+    <div class="head-text">
+      <p class="eyebrow">Upper School Counseling</p>
+      <h1>Four-Year Course Planner</h1>
+    </div>
+    <p class="motto">Excellence. Character. Opportunity.</p>
+  </div>
+  <div class="head-bar"></div>
+</header>
+
+<div class="layout">
+<nav class="sidenav" id="sidenav" aria-label="Planner sections">
+  <div class="sn-student" id="snStudent"><span class="sn-name" id="snName">New course plan</span><span class="sn-grad" id="snGrad"></span></div>
+  <ol class="sn-list">
+    <li><a href="#s-info" data-spy="s-info"><span class="sn-num">1</span><span class="sn-text">Student &amp; Counselor</span><span class="sn-dot s-none" data-dot="info"></span></a></li>
+    <li><a href="#s-prior" data-spy="s-prior"><span class="sn-num">2</span><span class="sn-text">Prior Credit &amp; Placement</span><span class="sn-dot s-none" data-dot="prior"></span></a></li>
+    <li class="has-sub"><a href="#s-grades" data-spy="s-grades"><span class="sn-num">3</span><span class="sn-text">Four-Year Plan</span><span class="sn-dot s-none" data-dot="grades"></span></a>
+      <ul class="sn-sub">
+        <li><a href="#grade-9" data-spy="grade-9"><span class="sn-text">9th Grade</span><span class="sn-dot s-none" data-dot="g9"></span></a></li>
+        <li><a href="#grade-10" data-spy="grade-10"><span class="sn-text">10th Grade</span><span class="sn-dot s-none" data-dot="g10"></span></a></li>
+        <li><a href="#grade-11" data-spy="grade-11"><span class="sn-text">11th Grade</span><span class="sn-dot s-none" data-dot="g11"></span></a></li>
+        <li><a href="#grade-12" data-spy="grade-12"><span class="sn-text">12th Grade</span><span class="sn-dot s-none" data-dot="g12"></span></a></li>
+      </ul></li>
+    <li><a href="#s-cocurr" data-spy="s-cocurr"><span class="sn-num">4</span><span class="sn-text">Cocurricular Activities</span><span class="sn-dot s-none" data-dot="coc"></span></a></li>
+    <li><a href="#s-college" data-spy="s-college"><span class="sn-num">✎</span><span class="sn-text">College &amp; Career Interests</span><span class="sn-dot s-none" data-dot="college"></span></a></li>
+    <li><a href="#s-notes" data-spy="s-notes"><span class="sn-num">+</span><span class="sn-text">Counselor Notes</span><span class="sn-dot s-none" data-dot="notes"></span></a></li>
+    <li><a href="#s-tracker" data-spy="s-tracker"><span class="sn-num">✓</span><span class="sn-text">Credit Tracker</span><span class="sn-badge" id="snTrk">0/10</span></a></li>
+    <li><a href="#s-dist" data-spy="s-dist"><span class="sn-num">★</span><span class="sn-text">Graduation Distinctions</span><span class="sn-dot s-none" data-dot="dist"></span></a></li>
+    <li><a href="#s-ref" data-spy="s-ref"><span class="sn-num">i</span><span class="sn-text">Graduation Reference</span></a></li>
+    <li><a href="#s-submit" data-spy="s-submit"><span class="sn-num">5</span><span class="sn-text">Review &amp; Submit</span><span class="sn-dot s-none" data-dot="submit"></span></a></li>
+  </ol>
+  <div class="sn-key" aria-hidden="true"><span class="sn-dot s-done"></span> done <span class="sn-dot s-part"></span> needs attention <span class="sn-dot s-err"></span> fix <span class="sn-dot s-none"></span> not started</div>
+</nav>
+<main id="main">
+  <p class="lede">Build a plan for grades 9–12 that meets Woodward Academy and State of Georgia graduation requirements. Dropdowns update as courses are chosen, based on the prerequisites in the <em>2026–2027 Scheduling &amp; Curriculum Guide</em>.</p>
+
+  <!-- STEP 1 -->
+  <section class="card" id="s-info" aria-labelledby="h-info">
+    <h2 id="h-info"><span class="step">1</span>Student &amp; Counselor</h2>
+    <div class="grid g3">
+      <label>Student name <span class="req">*</span><input type="text" data-bind="info.studentName" autocomplete="off"></label>
+      <label>Student email <span class="req">*</span><input type="email" data-bind="info.studentEmail" autocomplete="off" placeholder="name@woodward.edu"></label>
+      <label>Projected graduation year <span class="req">*</span>
+        <select data-bind="info.classOf"><option value="">— select —</option></select><small>Used to label each grade’s school year and printed on the plan.</small></label>
+      <label>Counselor name <span class="req">*</span><input type="text" data-bind="info.counselorName" autocomplete="off"><small>Filled from your Google account; you may edit it.</small></label>
+      <label>Counselor email <span class="req">*</span><input type="email" data-bind="info.counselorEmail" readonly placeholder="Filled in when you sign in"><small>Taken from your Google sign-in.</small></label>
+      <label>Date <span class="req">*</span><input type="date" data-bind="info.date"></label>
+    </div>
+    <div class="signin" id="signin">
+      <div id="signinOut">
+        <button type="button" class="btn primary" id="gsiBtn"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#fff" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#fff" opacity=".85" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#fff" opacity=".7" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#fff" opacity=".55" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Sign in with Google</button>
+        <small>Required. Sign in with your <b>@woodward.edu</b> account. The plan is created in <b>your</b> Google Drive and you are its owner.</small>
+      </div>
+      <div id="signinIn" hidden><span class="ok-dot"></span> Signed in as <b id="siName"></b> (<span id="siEmail"></span>) <button type="button" class="btn link" id="signOutBtn">Sign out</button></div>
+      <div id="signinMsg" class="signin-msg" role="status" hidden></div>
+      <div id="signinErr" class="signin-err" role="alert" hidden></div>
+      <details class="signin-help" id="signinHelp"><summary>Having trouble signing in?</summary><div id="signinDiag" class="signin-diag"></div><p>If nothing happens when you click, your browser may be blocking the Google pop-up (look for an icon in the address bar and allow pop-ups for this site). Pop-ups, extensions and school network filters are the most common causes.</p></details>
+    </div>
+    <div class="import-box">
+      <b>Have a plan file from the Student &amp; Family Planner?</b>
+      <label class="btn ghost filebtn">Import a student’s plan file…<input type="file" id="importFamily" accept=".json,application/json" hidden></label>
+      <small>Fills in the courses, prior credit and cocurriculars from the file. Family files are anonymous — you then add the student’s name and email below.</small>
+      <div id="importMsg" role="status" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="card" id="s-prior" aria-labelledby="h-prior">
+    <h2 id="h-prior"><span class="step">2</span>Prior Credit &amp; Placement</h2>
+    <p class="help">Enter credit and placement the student brings into the Upper School. These feed the prerequisite checks and the credit tracker below. Middle School course names follow the <em>Middle School Scheduling &amp; Curriculum Guide 2026–2027</em>.</p>
+
+    <h3>From Woodward Middle School</h3>
+    <div class="grid g2">
+      <label>Physical Science (8th grade)
+        <select data-bind="prior.psCredit">
+          <option value="0">Not completed / not at WA Middle School</option>
+          <option value="0.5">Fall semester completed (½ unit)</option>
+          <option value="1">Both semesters completed (1 unit)</option>
+        </select>
+        <small>Earns ½ unit of Upper School <b>science credit</b> per semester (grade D or higher; shown as “P”, not in GPA).</small></label>
+      <label>Math completed in Middle School
+        <select data-bind="prior.msMath">
+          <option value="none">Pre-Algebra / Fundamentals of Algebra (Transition) — start Algebra 1 in 9th</option>
+          <option value="alg1">Algebra 1 (CP / EP)</option>
+          <option value="alg1hp">Algebra 1 (HP)</option>
+          <option value="geohp">Algebra 1 (HP) + Geometry (HP)</option>
+        </select>
+        <small>Middle School math earns no Upper School credit, but 4 consecutive math units are still required in grades 9–12.</small></label>
+      <label>World Language completed in Middle School <span class="muted">(including Upper School language classes)</span>
+        <select data-bind="prior.msLang">
+          <option value="">None / new to the language</option>
+          <optgroup label="French">
+            <option value="fr:1">Level 1 complete — MS 7EP+8EP, 8HP or 1HP, or Upper School French 1 → start at French 2</option>
+            <option value="fr:2">Levels 1–2 complete — MS 2HP (from 2027–28) or Upper School French 2 → start at French 3</option>
+            <option value="fr:3">Levels 1–3 complete — Upper School French 3 → start at French 4</option>
+            <option value="fr:4">Levels 1–4 complete — Upper School French 4 → start at French 5 / AP</option>
+          </optgroup>
+          <optgroup label="Spanish">
+            <option value="sp:1">Level 1 complete — MS 7EP+8EP, 8HP or 1HP, or Upper School Spanish 1 → start at Spanish 2</option>
+            <option value="sp:2">Levels 1–2 complete — MS 2HP (from 2027–28) or Upper School Spanish 2 → start at Spanish 3</option>
+            <option value="sp:3">Levels 1–3 complete — Upper School Spanish 3 → start at Spanish 4</option>
+            <option value="sp:4">Levels 1–4 complete — Upper School Spanish 4 → start at Spanish 5 / AP</option>
+          </optgroup>
+          <optgroup label="German">
+            <option value="de:1">Level 1 complete — Upper School German 1 → start at German 2</option>
+            <option value="de:2">Levels 1–2 complete — Upper School German 2 → start at German 3</option>
+            <option value="de:3">Levels 1–3 complete — Upper School German 3 → start at German 4</option>
+            <option value="de:4">Levels 1–4 complete — Upper School German 4 → start at German 5 / AP</option>
+          </optgroup>
+          <optgroup label="Japanese">
+            <option value="ja:1">Level 1 complete — Upper School Japanese 1 → start at Japanese 2</option>
+            <option value="ja:2">Levels 1–2 complete — Upper School Japanese 2 → start at Japanese 3</option>
+            <option value="ja:3">Levels 1–3 complete — Upper School Japanese 3 → start at Japanese 4 / AP</option>
+            <option value="ja:4">Levels 1–4 complete — Upper School Japanese 4 → AP Japanese</option>
+          </optgroup>
+          <optgroup label="Mandarin Chinese">
+            <option value="zh:1">Level 1 complete — Upper School Chinese 1 → start at Chinese 2</option>
+            <option value="zh:2">Levels 1–2 complete — Upper School Chinese 2 → start at Chinese 3</option>
+            <option value="zh:3">Levels 1–3 complete — Upper School Chinese 3 → start at Chinese 4 / AP</option>
+            <option value="zh:4">Levels 1–4 complete — Upper School Chinese 4 → AP Chinese</option>
+          </optgroup>
+        </select>
+        <small>Language classes taken in Middle School earn no graduation credit by themselves — this just unlocks the next level. Two consecutive Upper School years are still required. If Woodward awarded Upper School credit for a class taken in Middle School, also add it under Transfer credit (Completed: Middle School).</small></label>
+      <div class="checks">
+        <label class="chk"><input type="checkbox" data-bind="prior.civics8"> Completed <b>Government &amp; Economics (HP)</b> in WA 8th grade<small>Gov/Econ is waived, Modern World History may start in 9th; 3 social studies units are still required.</small></label>
+        <label class="chk"><input type="checkbox" data-bind="prior.placement"> Language <b>placement test</b> / heritage speaker<small>Allows starting a language above Level 1 without the prior level.</small></label>
+      </div>
+    </div>
+
+    <h3>Transfer credit <span class="muted">(coursework from another school in grades 9–12, including approved summer forward credit)</span></h3>
+    <div id="transferRows" class="tr-rows"></div>
+    <button type="button" class="btn ghost" id="addTransfer">+ Add transfer credit</button>
+    <p class="help small">If the course matches a Woodward course, choose it so prerequisites are satisfied (for example Biology or Algebra 2). Otherwise pick a subject area and enter credits. Transfer work appears as TR- on the transcript and is not included in WA GPAs.</p>
+  </section>
+
+  <!-- STEP 3 -->
+  <section id="s-grades" aria-labelledby="h-grades">
+    <h2 class="plain" id="h-grades"><span class="step">3</span>Four-Year Plan <span class="gradbadge" id="gradBadge1"></span></h2>
+    <p class="help">Year-long courses are chosen in the <b>Fall / Full Year</b> dropdown and automatically fill both semesters. For semester courses, choose a Fall course and a Spring course. Items marked <b>⚑ approval</b> are available but need department chair / instructor approval. Courses whose prerequisites are not yet met appear greyed out at the end of each list with the reason.</p>
+    <div id="grades"></div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="card" id="s-cocurr" aria-labelledby="h-coc">
+    <h2 id="h-coc"><span class="step">4</span>Cocurricular Activities</h2>
+    <p class="help">Record the clubs, teams, arts groups and service programs the student is involved in now, or would like to explore in the future (from the <em>Upper School Cocurricular Guide</em>).</p>
+    <div id="cocRows" class="coc-rows"></div>
+    <button type="button" class="btn ghost" id="addCoc">+ Add activity</button>
+  </section>
+
+  <section class="card" id="s-college" aria-labelledby="h-college">
+    <h2 id="h-college"><span class="step">✎</span>College &amp; Career Interests <span class="muted">(optional)</span></h2>
+    <p class="help">Two open questions to help guide the conversation. The responses are printed on page 2 of the Google Doc.</p>
+    <div class="grid g2">
+      <label>Is the student interested in any specific colleges or universities? If so, which ones?
+        <textarea data-bind="info.colleges" aria-label="Colleges or universities of interest (optional)" rows="3" maxlength="240" placeholder="For example: Georgia Tech, Emory, UGA…"></textarea></label>
+      <label>Does the student have a particular major or path of study in mind? If so, what is it?
+        <textarea data-bind="info.major" aria-label="Major or path of study in mind (optional)" rows="3" maxlength="240" placeholder="For example: engineering, nursing, business, undecided…"></textarea></label>
+    </div>
+    <small>Free responses, up to 240 characters each.</small>
+  </section>
+
+  <section class="card" id="s-notes">
+    <h2 class="plain-h"><span class="step">+</span>Counselor Notes <span class="muted">(optional — included in the Google Doc)</span></h2>
+    <textarea data-bind="info.notes" aria-label="Counselor notes (optional)" rows="3" placeholder="Goals, scholarship or NCAA plans, accommodations, follow-ups…"></textarea>
+  </section>
+
+  <!-- TRACKER -->
+  <section class="card tracker" id="s-tracker" aria-labelledby="h-track">
+    <h2 id="h-track"><span class="step">✓</span>Credit Tracker <span class="gradbadge" id="gradBadge2"></span></h2>
+    <div class="legend" aria-hidden="true"><span class="dot done"></span>Complete <span class="dot part"></span>In progress <span class="dot none"></span>Not started</div>
+    <div id="trackerAreas" class="areas" aria-live="polite"></div>
+    <h3>Credits by grade <span class="muted">(GHSA / GISA checkpoints: 5 · 11 · 17 units)</span></h3>
+    <div id="trackerGrades" class="byg"></div>
+    <h3>Scholarship &amp; eligibility watch</h3>
+    <div id="trackerSchol" class="schol"></div>
+  </section>
+
+  <section class="card" id="s-dist" aria-labelledby="h-dist">
+    <h2 id="h-dist"><span class="step">★</span>Graduation Distinctions <span class="muted">(optional)</span></h2>
+    <p class="help">Woodward students can earn a “Distinction in Global Studies, Service Learning, Sustainability or Media” read at graduation. Tick any you are interested in: its required courses are listed beneath it and turn bold with a ✓ as they appear in the four-year plan, and a pop-up appears when all of a distinction’s courses are planned. The other requirements (applications, hours, capstone projects, portfolios, averages) are a checklist in the Google Doc.</p>
+    <div id="distTrack" aria-live="polite"></div>
+  </section>
+
+
+  <!-- REFERENCE -->
+  <details class="card ref" id="s-ref">
+    <summary><span class="step">i</span>Graduation, scholarship &amp; NCAA reference <span class="muted">(this is also page 2 of the Google Doc)</span></summary>
+    <div id="refBody" class="ref-body"></div>
+  </details>
+
+  <!-- SUBMIT -->
+  <section class="card submit" id="s-submit" aria-labelledby="h-sub">
+    <h2 id="h-sub"><span class="step">5</span>Review &amp; Submit</h2>
+    <div id="disclaimer" class="disclaimer" role="note"></div>
+    <div id="readiness" class="ready" aria-live="polite"></div>
+    <div id="overrideBox" class="override" hidden>
+      <label class="chk"><input type="checkbox" id="ovOn"> <b>Counselor override</b> — submit even though items above are unresolved<small>Use for transfer students, approved exceptions, or items still pending approval. The override and reason are recorded in the Google Doc.</small></label>
+      <label>Reason for override <span class="req">*</span><textarea id="ovReason" rows="2"></textarea></label>
+    </div>
+    <p class="help small">Submitting creates a Google Doc in <b>your Google Drive</b> (you are the owner and can edit it) and shares it <b>view-only</b> with the student. Page 1 is the four-year plan; page 2 is the graduation, scholarship and NCAA reference. You must be signed in with Google (Step 1).</p>
+    <div class="actions">
+      <button type="button" class="btn primary big" id="submitBtn">Submit Course Plan</button>
+      <button type="button" class="btn ghost" id="saveDraft">Save draft to my Google Drive</button>
+      <button type="button" class="btn ghost" id="loadDraft">Open a saved draft…</button>
+      <button type="button" class="btn link" id="resetAll">Start over</button>
+    </div>
+    <div class="actions refresh-row"><button type="button" class="btn ghost" id="refreshBtn">Refresh a Doc’s tracker…</button><span class="help small">Changed courses with the dropdowns in a Google Doc you created? This recalculates its graduation and distinction trackers in place.</span></div>
+    <div id="refreshMsg" class="submitmsg" role="status" aria-live="polite"></div>
+    <p class="help small">Drafts are saved <b>privately in your own Google Drive</b>, in a folder named “WA Course Planner Drafts.” They are never shared with students and nothing is saved to this computer’s Downloads folder.</p>
+    <div id="submitMsg" class="submitmsg" role="status" aria-live="polite"></div>
+  </section>
+</main>
+</div>
+
+<footer class="foot"><div class="wrap">
+  <img src="assets/img/wordmark-red.png" alt="Woodward Academy" class="foot-mark">
+  <p>Planning tool only — the Upper School Scheduling &amp; Curriculum Guide and the Academic Dean’s office govern. Student information is sent only to Google (your Drive) when a plan is submitted — it does not pass through any other server. Drafts stay in this browser tab.</p>
+</div></footer>
+
+<div id="stickybar" class="stickybar" role="region" aria-label="Credit progress">
+  <div class="sb-in wrap">
+    <span class="sb-label">Total credits <b id="sbTotal">0 / 22</b></span>
+    <span class="sb-bar"><span id="sbFill"></span></span>
+    <span class="sb-label"><b id="sbReq">0 of 10</b> requirements complete</span>
+    <span class="sb-label" id="sbGrad"></span>
+        <span class="sb-sound"><button type="button" class="sb-snd" id="sndBtn" aria-pressed="true" title="Turn the celebration sound on or off">🔊 Sound on</button><input type="range" id="sndVol" min="0" max="100" value="70" aria-label="Celebration sound volume" title="Volume"></span>
+    <a href="#s-tracker" class="sb-link">View tracker</a>
+  </div>
+</div>
+
+<div id="celebrate" class="celebrate" aria-hidden="true"></div>
+
+<dialog id="dlg"><form method="dialog"><div id="dlgBody"></div><div class="dlg-actions" id="dlgActions"></div></form></dialog>
+
+<script src="assets/js/config.js?v=g"></script>
+<script src="assets/js/catalog.js?v=m"></script>
+<script src="assets/js/cocurriculars.js?v=g"></script>
+<script src="assets/js/engine.js?v=o"></script>
+<script src="assets/js/reference.js?v=m"></script>
+<script src="assets/js/distinctions.js?v=n"></script>
+<script src="assets/js/planio.js?v=o"></script>
+<script src="assets/js/distui.js?v=n"></script>
+<script src="assets/js/combo.js?v=g"></script>
+<script src="assets/js/docbuilder.js?v=o"></script>
+<script src="assets/js/google.js?v=r"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="assets/js/sound.js?v=k"></script>
+<script src="assets/js/app.js?v=r"></script>
+</body>
+</html>
