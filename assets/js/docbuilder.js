@@ -38,15 +38,39 @@
 
   const chipLine = c => p((c.sem ? '<span style="color:' + C.SLATE + ';font-weight:bold;">' + esc(c.sem) + ':</span> ' : '') + '[[DD:' + esc(c.key) + ']]', 'font-size:7pt;margin-bottom:1pt;');
 
+  // ---- text that can be refreshed later (named ranges) and checkboxes (real Google Docs checklist items) ----
+  const DOC_STATUS = { done: '✓ Projected to be completed', part: '◐ Projected: in progress', none: '○ Projected: not yet planned' };
+  const SFG = { done: C.GREEN, part: C.GOLD, none: C.CORAL }, SBG = { done: C.GREEN_BG, part: C.GOLD_BG, none: C.CORAL_BG };
+  const CONDENSED = 'This plan is a projection only and does not guarantee placement in any course or course availability. It may change based on student interests, academic performance, prerequisites and approvals, availability and enrollment, scheduling, and course changes or restructuring. The current Scheduling & Curriculum Guide governs; please review this plan with your counselor each year.';
+  const akey = k => String(k).replace(/[^a-z0-9]/gi, '').toLowerCase();
+  function groupText(g) {
+    const prog = g.kind === 'langyears' ? g.have + ' of ' + g.need + ' years' + (g.detail ? ' (' + g.detail + ')' : '') : g.kind === 'count' ? (g.have >= g.need ? 'planned' : 'not yet planned') : g.have + ' of ' + g.need + ' ' + g.unit;
+    const hits = (g.items || []).filter(i => i.hit).map(i => i.label.replace(/\s*\((tick when approved|summer;[^)]*|max [^)]*)\)/, '')); const shown = hits.slice(0, 7);
+    return g.title + ' — Projected: ' + prog + (shown.length ? ' — ' + shown.join(' · ') + (hits.length > 7 ? ' · …' : '') : '') + (g.met ? '  ✓' : '');
+  }
+  /** Every piece of tracker text that "Refresh tracker from Doc" can rewrite, keyed by its named-range name. */
+  function slots(d) {
+    const m = {}; const t = d.tracker || { areas: [], ghsa: [], rigor: { have: 0 }, ncaa: { total: 0 } };
+    t.areas.forEach(a => { const k = akey(a.key); m['wa-t-' + k + '-u'] = { text: fmt(a.have) + ' / ' + fmt(a.req) + ' units', fg: C.NAVY }; m['wa-t-' + k + '-s'] = { text: DOC_STATUS[a.status], fg: SFG[a.status], bg: SBG[a.status], cell: true }; });
+    m['wa-ghsa'] = { text: t.ghsa.map(x => ord(x.grade) + ' grade ' + fmt(x.have) + '/' + x.need + (x.met ? ' ✓' : '')).join('   ·   '), fg: C.MUTED };
+    m['wa-hn'] = { text: t.rigor.have + ' (4 needed)   ·   NCAA Division I core credits planned: ' + fmt(t.ncaa.total) + ' (16 needed)', fg: C.MUTED };
+    const gt = root.WA && root.WA.distinctions && root.WA.distinctions.groupText ? root.WA.distinctions.groupText : groupText;   // one shared wording for the Doc and the family printout
+    (d.distinctions || []).forEach(x => { m['wa-d-' + x.id + '-st'] = { text: DOC_STATUS[x.status], fg: SFG[x.status] }; x.groups.forEach(g => { m['wa-d-' + x.id + '-g-' + g.id] = { text: gt(g), fg: g.met ? C.GREEN : C.INK }; }); });
+    return m;
+  }
+
   function buildHtml(d) {
-    const out = [];
+    const out = [], S = slots(d);
+    const slot = n => '[[S:' + n + ']]' + esc(S[n].text) + '[[/S]]';
+    const cb = (text, st) => p('[[CB]]' + esc(text), st || 'font-size:7pt;');
     /* header */
     out.push(table([[
       cell(p('[[LOGO]]', 'font-size:11pt;color:' + C.RED + ';'), { w: 230, b: 0, pad: '0 0 2pt 0', v: 'middle' }),
       cell(p('FOUR-YEAR COURSE PLAN', 'font-size:17pt;font-weight:bold;color:' + C.NAVY + ';text-align:right;') +
         p('Upper School Counseling  ·  Projected graduation: Spring ' + esc(d.classOf), 'font-size:7.5pt;color:' + C.SLATE + ';text-align:right;'), { w: 310, b: 0, pad: '0 0 2pt 0', v: 'middle' })
     ]]));
-    out.push(rule(C.RED, 3)); out.push(gap(3));
+    out.push(rule(C.RED, 3));
+    out.push(gap(3));
 
     /* student / counselor info */
     const lab = (t, w) => cell(p(t, 'font-size:6.5pt;font-weight:bold;color:' + C.NAVY + ';'), { w, bg: C.CREAM, pad: '3pt 5pt' });
@@ -58,7 +82,12 @@
       row('COUNSELOR', d.counselor.name, 'COUNSELOR EMAIL', d.counselor.email),
       row('DATE', d.dateText || d.date, 'PROJECTED GRADUATION', 'Spring ' + d.classOf + '  (Class of ' + d.classOf + ')')
     ]));
-    out.push(gap(5));
+    out.push(gap(4));
+
+    /* projected-schedule disclaimer: directly under the student / counselor information, above the four-year plan */
+    const disc = (d.reference && d.reference.disclaimer) || DEFAULT_DISCLAIMER;
+    out.push(sectionTitle(disc.title.toUpperCase())); out.push(p(esc(disc.text), 'font-size:6.8pt;color:' + C.INK + ';'));
+    out.push(gap(4));
 
     /* four-year grid */
     const labW = 54, colW = (540 - labW) / 4;
@@ -71,22 +100,22 @@
     rows.push([cell(p('Summer', 'font-size:7pt;font-weight:bold;color:' + C.NAVY + ';'), { w: labW, bg: C.MIST })]
       .concat(d.grades.map(g => cell(g.summerChips && g.summerChips.length ? g.summerChips.map(chipLine).join('') : (g.summer && g.summer.length ? g.summer.map(courseLine).join('') : p('—', 'font-size:7.5pt;color:#a0a0a0;')), { w: colW }))));
     out.push(table(rows));
-    if (d.chipDefs && Object.keys(d.chipDefs).length) out.push(p('Counselors: each course in the grid is a dropdown — click one to choose a different course. Names are shortened to fit and start with the level (EP, HP, AP, CP); each list shows common eligible choices, not the full catalog. The tracker below shows the plan as submitted and does not update when a dropdown is changed.', 'font-size:6.3pt;color:' + C.MUTED + ';font-style:italic;margin-top:2pt;'));
+    if (d.chipDefs && Object.keys(d.chipDefs).length) out.push(p('Counselors: each course in the grid is a dropdown — click one to choose a different course (names are shortened and start with the level; each list shows common eligible choices). After changing a dropdown, use “Refresh tracker from Doc” in the planner to update the trackers below. Tick “Completed” as each requirement is finished.', 'font-size:6.3pt;color:' + C.MUTED + ';font-style:italic;margin-top:2pt;'));
     out.push(gap(6));
 
     /* tracker */
     out.push(sectionTitle('GRADUATION REQUIREMENT TRACKER'));
     const tcell = a => {
-      const bg = a.status === 'done' ? C.GREEN_BG : a.status === 'part' ? C.GOLD_BG : C.CORAL_BG;
-      const fg = a.status === 'done' ? C.GREEN : a.status === 'part' ? C.GOLD : C.CORAL;
-      const st = a.status === 'done' ? '✓ Complete' : a.status === 'part' ? '◐ In progress' : '○ Not started';
-      return cell(p(esc(a.label.toUpperCase()), 'font-size:6.5pt;font-weight:bold;color:' + C.NAVY + ';') + p(fmt(a.have) + ' / ' + fmt(a.req) + ' units', 'font-size:10pt;font-weight:bold;color:' + C.NAVY + ';') + p(st, 'font-size:6.5pt;font-weight:bold;color:' + fg + ';'), { w: 108, bg, bc: '#ffffff', pad: '4pt 5pt' });
+      const k = akey(a.key), bg = SBG[a.status], fg = SFG[a.status];
+      return cell(p(esc(a.label.toUpperCase()), 'font-size:6.5pt;font-weight:bold;color:' + C.NAVY + ';') +
+        p('<span style="font-size:6pt;font-weight:normal;color:' + C.MUTED + ';">Projected: </span>' + slot('wa-t-' + k + '-u'), 'font-size:8.5pt;font-weight:bold;color:' + C.NAVY + ';') +
+        p(slot('wa-t-' + k + '-s'), 'font-size:5.4pt;font-weight:bold;color:' + fg + ';') + cb('Completed', 'font-size:7pt;color:' + C.INK + ';'), { w: 108, bg, pad: '3pt 4pt' });
     };
     const A = d.tracker.areas;
     out.push(table([A.slice(0, 5).map(tcell), A.slice(5, 10).map(tcell)]));
-    const gh = d.tracker.ghsa.map(x => ord(x.grade) + ' grade ' + fmt(x.have) + '/' + x.need + (x.met ? ' ✓' : '')).join('   ·   ');
-    out.push(p('Credits by end of year (GHSA checkpoints):  ' + esc(gh), 'font-size:6.8pt;color:' + C.MUTED + ';margin-top:3pt;'));
-    out.push(p('HOPE / Zell Miller rigor courses planned: ' + d.tracker.rigor.have + ' (4 needed)   ·   NCAA Division I core credits planned: ' + fmt(d.tracker.ncaa.total) + ' (16 needed)', 'font-size:6.8pt;color:' + C.MUTED + ';margin-bottom:2pt;'));
+    out.push(p('Credits by end of year (GHSA checkpoints):  ' + slot('wa-ghsa'), 'font-size:6.8pt;color:' + C.MUTED + ';margin-top:3pt;'));
+    out.push(p('HOPE / Zell Miller rigor courses planned: ' + slot('wa-hn'), 'font-size:6.8pt;color:' + C.MUTED + ';'));
+    out.push(gap(3));
 
     /* cocurriculars */
     out.push(sectionTitle('COCURRICULAR ACTIVITIES'));
@@ -109,15 +138,44 @@
     if (d.notes) notes.push(['Counselor notes', d.notes]);
     notes.forEach(n => out.push(p('<b style="color:' + C.NAVY + ';">' + esc(n[0]) + ':</b>  ' + esc(n[1]), 'font-size:6.8pt;margin-top:1pt;margin-bottom:1pt;')));
 
-    /* projected-schedule disclaimer (bottom of page 1) */
-    const disc = (d.reference && d.reference.disclaimer) || DEFAULT_DISCLAIMER;
-    if (disc) {
-      out.push(gap(4));
-      out.push(sectionTitle(disc.title.toUpperCase()));
-      out.push(p(esc(disc.text), 'font-size:6.8pt;color:' + C.INK + ';'));
+    /* page 2: college & career interests (always), then the graduation distinctions the student chose (all four fit) */
+    const dists = d.distinctions || [], it = d.interests || { colleges: '', major: '' };
+    out.push(p('[[PB]]', 'font-size:2pt;'));
+    out.push(p('COLLEGE &amp; CAREER INTERESTS', 'font-size:12pt;font-weight:bold;color:' + C.NAVY + ';margin-bottom:1pt;'));
+    out.push(p(esc(d.student.name) + '  ·  Projected graduation: Spring ' + esc(d.classOf) + '  ·  Free responses shared by the student and family', 'font-size:7.5pt;color:' + C.SLATE + ';'));
+    out.push(rule(C.RED, 2)); out.push(gap(4));
+    const ans = t => t ? p(esc(t).replace(/\s*[\r\n]+\s*/g, ' '), 'font-size:7.8pt;') : p('—', 'font-size:7.8pt;color:#a0a0a0;');
+    const qlab = t => p(t, 'font-size:6.5pt;font-weight:bold;color:' + C.NAVY + ';');
+    out.push(table([
+      [cell(qlab('COLLEGES OR UNIVERSITIES OF INTEREST'), { w: 150, bg: C.CREAM, pad: '4pt 6pt' }), cell(ans(it.colleges), { w: 390, pad: '4pt 6pt' })],
+      [cell(qlab('MAJOR OR PATH OF STUDY IN MIND'), { w: 150, bg: C.CREAM, pad: '4pt 6pt' }), cell(ans(it.major), { w: 390, pad: '4pt 6pt' })]
+    ]));
+    out.push(gap(6));
+    if (dists.length) {
+      out.push(p('GRADUATION DISTINCTIONS', 'font-size:12pt;font-weight:bold;color:' + C.NAVY + ';margin-bottom:1pt;'));
+      out.push(p('Courses are projected from the four-year plan; tick each box when the requirement has actually been completed.', 'font-size:7pt;color:' + C.SLATE + ';'));
+      out.push(rule(C.RED, 2)); out.push(gap(4));
+      const distCell = x => {
+        const parts = [];
+        parts.push(p(esc('DISTINCTION IN ' + x.name.toUpperCase()), 'font-size:8.5pt;font-weight:bold;color:' + C.RED + ';margin-bottom:1pt;'));
+        parts.push(p('Monitored by the ' + esc(x.coordinator) + '.  ' + esc(x.apply), 'font-size:6.3pt;color:' + C.MUTED + ';margin-bottom:4pt;'));
+        parts.push(p('<b style="color:' + C.NAVY + ';">Course requirements:</b>  ' + slot('wa-d-' + x.id + '-st'), 'font-size:7.3pt;font-weight:bold;color:' + SFG[x.status] + ';margin-bottom:2pt;'));
+        x.groups.forEach(g => parts.push(p(slot('wa-d-' + x.id + '-g-' + g.id), 'font-size:6.6pt;margin-bottom:2pt;')));
+        parts.push(p('<b style="color:' + C.NAVY + ';">Additional requirements — check each box when completed:</b>', 'font-size:7pt;margin-top:6pt;margin-bottom:2pt;'));
+        x.manual.forEach(m => parts.push(cb(m.label, 'font-size:6.5pt;')));
+        x.manualGroups.forEach(g => { parts.push(p('<b>' + esc(g.title) + '</b> (need ' + g.need + ')', 'font-size:6.8pt;color:' + C.NAVY + ';margin-top:4pt;')); g.items.forEach(m => parts.push(cb(m.label, 'font-size:6.3pt;'))); });
+        parts.push(cb('Completed — Distinction in ' + x.name, 'font-size:7.2pt;font-weight:bold;color:' + C.NAVY + ';margin-top:5pt;'));
+        return parts.join('');
+      };
+      const drows = [];
+      for (let i = 0; i < dists.length; i += 2) {
+        if (i) drows.push([cell(gap(16), { w: 270, b: 0, pad: '0' }), cell(gap(16), { w: 270, b: 0, pad: '0' })]);   // clear space between rows of distinctions
+        drows.push([cell(distCell(dists[i]), { w: 270, b: 0, pad: '0 10pt 0 0' }), cell(dists[i + 1] ? distCell(dists[i + 1]) : p('&nbsp;'), { w: 270, b: 0, pad: '0 0 0 10pt' })]);
+      }
+      out.push(table(drows));
     }
 
-    /* page 2 */
+    /* last page: eligibility reference */
     out.push(p('[[PB]]', 'font-size:2pt;'));
     const ref = d.reference || { sections: [] };
     out.push(p('GRADUATION, SCHOLARSHIP &amp; ELIGIBILITY REFERENCE', 'font-size:12pt;font-weight:bold;color:' + C.NAVY + ';margin-bottom:1pt;'));
@@ -133,7 +191,7 @@
   }
 
   const WA = root.WA = root.WA || {};
-  (WA.versions = WA.versions || {})['docbuilder.js'] = '7';
-  WA.docbuilder = { buildHtml, DEFAULT_DISCLAIMER };
+  (WA.versions = WA.versions || {})['docbuilder.js'] = '13';
+  WA.docbuilder = { buildHtml, slots, groupText, DOC_STATUS, DEFAULT_DISCLAIMER };
   if (typeof module !== 'undefined') module.exports = WA.docbuilder;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
