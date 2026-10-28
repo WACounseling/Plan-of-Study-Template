@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const WA = window.WA = window.WA || {};
-  (WA.versions = WA.versions || {})['google.js'] = '13';
+  (WA.versions = WA.versions || {})['google.js'] = '14';
   const CFG = window.WA_CONFIG || {};
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
   const SCOPE = 'openid email profile ' + DRIVE_FILE;
@@ -357,15 +357,23 @@
   const tabOf = doc => (doc.tabs && doc.tabs[0] && doc.tabs[0].documentTab) || doc;
   const getTabDoc = (id, tok) => api(DOCS + encodeURIComponent(id) + '?includeTabsContent=true', {}, tok);
   function readChips(tab) {
-    const defs = tab.dropdownDefinitions || {}, out = [];
+    const defs = tab.dropdownDefinitions || {}, chips = [], kinds = new Set();
     walk(tab.body && tab.body.content, n => {
       if (n.type === 't') return;
       (n.el.paragraph.elements || []).forEach(pe => {
-        const dd = pe.dropdown; if (!dd) return;
-        const def = defs[dd.dropdownDefinitionId], props = def && (def.dropdownDefinitionProperties || def), opt = props && (props.options || []).find(o => o.optionId === dd.selectedOptionId);
-        out.push({ key: String(dd.dropdownDefinitionId || '').replace(/^kix\./, ''), label: opt ? opt.displayValue : null });
+        Object.keys(pe).forEach(k => { if (!/^(startIndex|endIndex|textRun)$/.test(k)) kinds.add(k); });
+        const dd = pe.dropdown || Object.keys(pe).map(k => (/dropdown/i.test(k) ? pe[k] : null)).find(x => x && typeof x === 'object' && (x.dropdownDefinitionId || x.definitionId));
+        if (!dd) return;
+        const id = dd.dropdownDefinitionId || dd.definitionId, sel = dd.selectedOptionId || dd.optionId, def = defs[id], props = def && (def.dropdownDefinitionProperties || def);
+        const opt = ((props && props.options) || []).find(o => (o.optionId || o.id) === sel);
+        chips.push({ key: String(id || '').replace(/^kix\./, ''), label: opt ? (opt.displayValue || opt.text || opt.label || null) : null });
       });
     });
+    return { chips, kinds: Array.from(kinds) };
+  }
+  function textBetween(tab, s, e) {
+    let out = '';
+    walk(tab.body && tab.body.content, n => { if (n.type === 't') return; (n.el.paragraph.elements || []).forEach(pe => { const c = pe.textRun && pe.textRun.content; if (c == null) return; const a = Math.max(s, pe.startIndex), b = Math.min(e, pe.endIndex); if (b > a) out += c.slice(a - pe.startIndex, b - pe.startIndex); }); });
     return out;
   }
   function cellAt(tab, idx) {
@@ -384,11 +392,14 @@
     let doc = await getTabDoc(docId, tok), tab = tabOf(doc);
     const ranges = tab.namedRanges || {};
     if (!Object.keys(ranges).some(k => k.indexOf('wa-t-') === 0)) { const e = new Error('The tracker areas could not be found in this Doc (they may have been deleted), so it can’t be refreshed.'); e.nocopy = true; throw e; }
-    const out = compute(copy, readChips(tab)), slots = out.slots || {};
+    const rc = readChips(tab);
+    if (!rc.chips.length) { const e = new Error('No dropdown choices could be read from this Doc, so nothing was changed. (Element types found in the Doc: ' + (rc.kinds.join(', ') || 'text only') + '.)'); e.nochips = true; throw e; }
+    const out = compute(copy, rc.chips), slots = out.slots || {};
     // 1) rewrite each tracker text (latest position first so earlier positions stay valid)
     const ops = [];
     Object.keys(slots).forEach(name => { const e = ranges[name]; if (e) (e.namedRanges || []).forEach(nr => { const r = (nr.ranges || [])[0]; if (r) ops.push({ name, s: r.startIndex, e: r.endIndex, text: slots[name].text }); }); });
     ops.sort((a, b) => b.s - a.s);
+    const diffs = ops.map(o => ({ name: o.name, before: textBetween(tab, o.s, o.e), after: o.text })).filter(x => x.before !== x.after);
     const reqs = Array.from(new Set(ops.map(o => o.name))).map(name => ({ deleteNamedRange: { name } }));
     ops.forEach(o => { reqs.push({ deleteContentRange: { range: { startIndex: o.s, endIndex: o.e } } }, { insertText: { location: { index: o.s }, text: o.text } }, { createNamedRange: { name: o.name, range: { startIndex: o.s, endIndex: o.s + o.text.length } } }); });
     if (reqs.length) await api(DOCS + encodeURIComponent(docId) + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: reqs, writeControl: { requiredRevisionId: doc.revisionId } }) }, tok);
@@ -402,7 +413,7 @@
     if (style.length) await api(DOCS + encodeURIComponent(docId) + ':batchUpdate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: style }) }, tok);
     // 3) keep the saved plan copy in step with the Doc
     if (out.copy) await api('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(copyId) + '?uploadType=media', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(out.copy) }, tok);
-    return { name: meta.name, url: 'https://docs.google.com/document/d/' + docId + '/edit', updated: ops.length, summary: out.summary || {} };
+    return { name: meta.name, url: 'https://docs.google.com/document/d/' + docId + '/edit', updated: ops.length, summary: out.summary || {}, diffs, chipsRead: rc.chips.length, kinds: rc.kinds };
   };
 
   WA.google = G;
